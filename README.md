@@ -13,6 +13,9 @@ sluice --resume --execute       # after a stop
 sluice graph                    # the modules, their pins and the tag order
 ```
 
+A module's alias in `sluice.yml` is a flag too: `--sdk 1.10.0` is `--module sdk=1.10.0`. Exit codes: 0 done or
+previewed clean, 1 refused, 2 stopped partway (`--resume` goes on), 3 usage.
+
 A preview is the default. Nothing is tagged, pushed or written without `--execute`.
 
 Configuration is an optional `sluice.yml` at the umbrella's root. Without one, sluice reads the graph from the

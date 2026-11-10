@@ -1,0 +1,23 @@
+{
+    "version": "${VERSION}",
+    "description": "Releases a Maven project split over the git submodules of one umbrella repository.",
+    "homepage": "https://github.com/BotMakerDev/sluice",
+    "license": "Apache-2.0",
+    "depends": ["git", "maven"],
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/BotMakerDev/sluice/releases/download/v${VERSION}/sluice-windows.zip",
+            "hash": "${HASH}"
+        }
+    },
+    "extract_dir": "sluice",
+    "bin": "sluice.exe",
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/BotMakerDev/sluice/releases/download/v$version/sluice-windows.zip"
+            }
+        }
+    }
+}

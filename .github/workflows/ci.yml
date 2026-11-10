@@ -22,3 +22,111 @@ jobs:
           cache: maven
       - name: Test
         run: mvn -B verify
+
+  # On a tag: the jar, an rpm and a deb, each package with its own runtime cut by jlink.
+  linux-packages:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Build the jar
+        shell: bash
+        run: |
+          mvn -B package -DskipTests
+          mv target/sluice-*-all.jar target/sluice-all.jar
+          java -jar target/sluice-all.jar --version
+      - name: Cut the runtime
+        shell: bash
+        run: |
+          # jdeps sees what the classes name; jdk.charsets is what a non-UTF-8 locale loads by lookup alone.
+          modules=$(jdeps --print-module-deps --ignore-missing-deps --multi-release 25 target/sluice-all.jar)
+          jlink --add-modules "$modules,jdk.charsets" --strip-debug --no-header-files --no-man-pages \
+            --output target/runtime
+          target/runtime/bin/java -jar target/sluice-all.jar --version
+      - name: Build the rpm and the deb
+        shell: bash
+        env:
+          NFPM_VERSION: '2.43.0'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/nfpm.tar.gz" \
+            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          tar -xzf "$RUNNER_TEMP/nfpm.tar.gz" -C "$RUNNER_TEMP" nfpm
+          export SLUICE_VERSION="${GITHUB_REF_NAME#v}"
+          "$RUNNER_TEMP/nfpm" package -f packaging/nfpm.yaml -p rpm -t target/sluice.rpm
+          "$RUNNER_TEMP/nfpm" package -f packaging/nfpm.yaml -p deb -t target/sluice.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            target/sluice-all.jar
+            target/sluice.rpm
+            target/sluice.deb
+          if-no-files-found: error
+
+  # On a tag: an MSI, and the same application image zipped with its scoop manifest.
+  windows-packages:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Build the jar
+        shell: bash
+        run: |
+          mvn -B package -DskipTests
+          mkdir -p target/input
+          mv target/sluice-*-all.jar target/input/sluice-all.jar
+      - name: Build the MSI and the zip
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          jpackage @packaging/windows/jpackage.txt --type app-image --input target/input --dest target/image \
+            --app-version "$version"
+          target/image/sluice/sluice.exe --version
+          (cd target/image && 7z a -tzip ../sluice-windows.zip sluice > /dev/null)
+          jpackage @packaging/windows/jpackage.txt --type msi --input target/input --dest target \
+            --app-version "$version" --win-dir-chooser --win-per-user-install
+          mv target/sluice-*.msi target/sluice.msi
+          hash=$(sha256sum target/sluice-windows.zip | cut -d' ' -f1)
+          sed -e "s/\${VERSION}/$version/g" -e "s/\${HASH}/$hash/g" packaging/scoop/sluice.json \
+            > target/sluice.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            target/sluice.msi
+            target/sluice-windows.zip
+            target/sluice.json
+          if-no-files-found: error
+
+  # Every package on the tag's GitHub release. sluice may have created the release page already, with the
+  # changelog's notes; otherwise it is created here, and sluice's own attempt then only says it exists.
+  attach:
+    needs: [linux-packages, windows-packages]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Attach to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes ""
+          gh release upload "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --clobber dist/*

@@ -43,3 +43,10 @@ All notable changes to this project are documented here, in the format of
   longer runs, refused otherwise.
 - Sync pins: each pom pin moved to its upstream's version on the branch, one local commit per module.
 - `builds-at-pins` builds a module pinning by a literal or a `<parent>` too, those pins moved in the clone.
+- The command line: `sluice [--umbrella DIR] (--all LEVEL | --module NAME[=VERSION|LEVEL]…) [--with-dependents]
+  [--force] [--execute] [--no-wait] [--why]`, `--resume`, `--sync-pins`, `--status [FILE]` and `sluice graph`
+  (the tag order, each edge and its pins). A module's alias in `sluice.yml` is a flag of its own (`--sdk 1.10.0`).
+  Exit codes: 0 done or previewed clean, 1 refused, 2 stopped partway, 3 usage. Ctrl-C stops a release between
+  two steps, resumable.
+- Packages: `sluice-<version>-all.jar`; on a tag, CI builds an rpm and a deb carrying their own Java runtime, a
+  Windows MSI, and a zip with its scoop manifest, all attached to the tag's GitHub release.

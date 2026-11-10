@@ -45,9 +45,11 @@ final class GitHubRest implements GitHub {
                 .POST(HttpRequest.BodyPublishers.ofString(json)).build();
         try {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 201 || response.statusCode() == 422
-                    && response.body().contains("already_exists")) {
+            if (response.statusCode() == 201) {
                 return Optional.empty();
+            }
+            if (response.statusCode() == 422 && response.body().contains("already_exists")) {
+                return notesOnExisting(repo, tag, body);
             }
             return Optional.of("GitHub answered " + response.statusCode());
         } catch (IOException e) {
@@ -56,6 +58,46 @@ final class GitHubRest implements GitHub {
             Thread.currentThread().interrupt();
             return Optional.of("interrupted");
         }
+    }
+
+    /**
+     * The page exists already: a resumed release asked before, or the tag's own CI made it to attach its packages.
+     * Notes it lacks are written; notes it has are left as they are.
+     */
+    private Optional<String> notesOnExisting(Repo repo, String tag, String body)
+            throws IOException, InterruptedException {
+        String releases = "/repos/" + repo.owner() + "/" + repo.name() + "/releases";
+        Optional<Existing> existing = get(releases + "/tags/" + URLEncoder.encode(tag, StandardCharsets.UTF_8))
+                .flatMap(GitHubRest::existing);
+        if (existing.isEmpty()) {
+            return Optional.of("the release page exists, but GitHub did not say what it holds");
+        }
+        if (body.isBlank() || !existing.get().body().isBlank()) {
+            return Optional.empty();
+        }
+        HttpRequest patch = request(releases + "/" + existing.get().id())
+                .method("PATCH", HttpRequest.BodyPublishers.ofString("{\"body\": " + Json.quote(body) + "}"))
+                .build();
+        int status = http.send(patch, HttpResponse.BodyHandlers.ofString()).statusCode();
+        return status == 200 ? Optional.empty()
+                : Optional.of("the release page exists, and GitHub answered " + status + " to its notes");
+    }
+
+    /** A release page as GitHub describes it. */
+    record Existing(long id, String body) {
+    }
+
+    /** The id and notes of a release page from GitHub's answer; empty when the answer holds no id. */
+    static Optional<Existing> existing(String json) {
+        try {
+            Object root = new Load(LoadSettings.builder().build()).loadFromString(json);
+            if (root instanceof Map<?, ?> map && map.get("id") instanceof Number id) {
+                return Optional.of(new Existing(id.longValue(), text(map, "body")));
+            }
+        } catch (RuntimeException unreadable) {
+            // Not what GitHub documents.
+        }
+        return Optional.empty();
     }
 
     /** The runs of an answer; JSON is read as the YAML it also is. */

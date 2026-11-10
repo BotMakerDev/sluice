@@ -47,4 +47,12 @@ class GitHubTest {
         assertEquals(List.of(), GitHubRest.runs("{\"message\": \"Not Found\"}"));
         assertEquals(List.of(), GitHubRest.runs("<html>"));
     }
+
+    @Test
+    void existingReleaseReadsIdAndNotes() {
+        assertEquals(Optional.of(new GitHubRest.Existing(42, "")),
+                GitHubRest.existing("{\"id\": 42, \"tag_name\": \"v1.0.0\", \"body\": null}"));
+        assertEquals("notes", GitHubRest.existing("{\"id\": 7, \"body\": \"notes\"}").orElseThrow().body());
+        assertEquals(Optional.empty(), GitHubRest.existing("{\"message\": \"Not Found\"}"));
+    }
 }

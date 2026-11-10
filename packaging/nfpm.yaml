@@ -1,0 +1,50 @@
+# One description, two packages: sluice.rpm and sluice.deb, built by CI on a tag (.github/workflows/ci.yml).
+#
+# Each carries its own Java runtime, cut by jlink to the modules the jar uses (target/runtime), so installing it
+# needs no JDK: only git and mvn, which sluice shells out to. That makes the package one architecture's.
+#
+# The version comes from the environment, which the workflow sets from the tag that triggered it.
+
+name: sluice
+arch: amd64
+platform: linux
+version: ${SLUICE_VERSION}
+version_schema: semver
+section: devel
+priority: optional
+maintainer: BotMakerDev <noreply@github.com>
+description: |
+  Releases a Maven project split over the git submodules of one umbrella repository: each module tagged in
+  dependency order, its dependents' pins moved to it, and every module back on its next snapshot.
+vendor: BotMakerDev
+homepage: https://github.com/BotMakerDev/sluice
+license: Apache-2.0
+
+contents:
+  - src: target/sluice-all.jar
+    dst: /usr/lib/sluice/sluice-all.jar
+
+  - src: target/runtime
+    dst: /usr/lib/sluice/runtime
+    type: tree
+
+  - src: packaging/sluice
+    dst: /usr/bin/sluice
+    file_info:
+      mode: 0755
+
+  - src: README.md
+    dst: /usr/share/doc/sluice/README.md
+  - src: LICENSE
+    dst: /usr/share/doc/sluice/LICENSE
+
+# Hard dependencies: a release runs both, and without them nothing works.
+overrides:
+  rpm:
+    depends:
+      - git
+      - maven
+  deb:
+    depends:
+      - git
+      - maven

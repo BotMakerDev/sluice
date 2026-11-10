@@ -1,0 +1,20 @@
+#!/bin/sh
+# The sluice command, as the rpm and the deb install it at /usr/bin/sluice.
+#
+# The package carries its own Java runtime (jlink, at /usr/lib/sluice/runtime), so a machine needs only git and
+# mvn. `exec` lets the JVM replace this shell: Ctrl-C reaches it, so a release stops between two steps and can be
+# resumed, and its exit code (0 done, 1 refused, 2 stopped, 3 usage) reaches the caller unchanged.
+#
+# SLUICE_JAVA_OPTS is a list of arguments, so it is left unquoted on purpose.
+set -eu
+
+HOME_DIR=/usr/lib/sluice
+JAVA="$HOME_DIR/runtime/bin/java"
+
+if [ ! -x "$JAVA" ]; then
+    echo "sluice: $JAVA is missing: the package is installed, its runtime is not." >&2
+    exit 1
+fi
+
+# shellcheck disable=SC2086
+exec "$JAVA" ${SLUICE_JAVA_OPTS:-} -jar "$HOME_DIR/sluice-all.jar" "$@"

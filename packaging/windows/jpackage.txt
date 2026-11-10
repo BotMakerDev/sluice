@@ -1,0 +1,6 @@
+--name sluice
+--vendor BotMakerDev
+--description "Releases a Maven project split over the git submodules of one umbrella repository."
+--main-jar sluice-all.jar
+--main-class com.botmaker.sluice.cli.Main
+--win-console

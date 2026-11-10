@@ -62,7 +62,8 @@ public interface GitHub {
 
     /**
      * Creates the release page of {@code tag}, its notes {@code body}. A page the tag already has counts as
-     * created: a resumed release asks again.
+     * created (a resumed release asks again), and gets {@code body} when it has no notes yet: the tag's CI may
+     * have made it first.
      *
      * @return empty when it was created, else why not
      */

@@ -15,5 +15,6 @@ Open work only. The plan for v0.1.0 is `docs/superpowers/plans/2026-11-10-sluice
   module's `jitpack.yml` would keep it from drifting.
 - A Maven repository that needs credentials to answer: the target reads it as not answering, so the wait times
   out.
-- The command line; rpm, deb and Windows packages.
+- Tab completion for bash and zsh, generated from the command line and installed by the rpm and the deb.
+- A signed rpm, and dnf and apt repositories to install from.
 - v2: the extension SPI published as a stable API; layouts beyond an umbrella of submodules.

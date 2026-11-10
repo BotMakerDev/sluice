@@ -36,6 +36,7 @@ import com.botmaker.sluice.target.Waits;
 import com.botmaker.sluice.target.Waits.Published;
 import com.botmaker.sluice.target.Waits.Sleeper;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -97,6 +98,21 @@ public final class Release {
     public record Outcome(Status status, Optional<Path> log, Optional<Path> state) {
     }
 
+    private static final String NO_STATE = StateFile.DIR + "/ holds no release's state";
+
+    /** A run's state and the file that holds it. */
+    public record Saved(Path file, ReleaseState state) {
+    }
+
+    /** The state in {@code file}, or the newest run's under {@code releases/} when it is empty. */
+    public static Saved state(Path umbrella, Optional<Path> file) {
+        Path at = file.or(() -> StateFile.newest(umbrella)).orElseThrow(() -> new Refusal(NO_STATE));
+        if (!Files.isRegularFile(at)) {
+            throw new Refusal(at + ": no such file");
+        }
+        return new Saved(at, StateFile.read(at));
+    }
+
     /** What a run reaches outside itself, so a test can put local stand-ins there. */
     record Wiring(Function<Config, Function<Module, PublishTarget>> targets, Supplier<Optional<GitHub>> github,
                   Function<BooleanSupplier, Sleeper> sleeper, List<String> mavenArgs, Clock clock) {
@@ -139,9 +155,13 @@ public final class Release {
 
     static Outcome resume(Path umbrella, Options options, BooleanSupplier stop, Consumer<Event> events,
                           Wiring wiring) {
-        Path file = StateFile.newest(umbrella)
-                .orElseThrow(() -> new Refusal("nothing to resume: " + StateFile.DIR + "/ holds no release's state"));
-        ReleaseState state = StateFile.read(file);
+        if (StateFile.newest(umbrella).isEmpty()) {
+            throw new Refusal("nothing to resume: " + NO_STATE);
+        }
+        // The same run --status shows.
+        Saved saved = state(umbrella, Optional.empty());
+        Path file = saved.file();
+        ReleaseState state = saved.state();
         if (state.status() == ReleaseState.Status.DONE) {
             events.accept(new Event.Line("nothing to resume: the release of " + file.getFileName() + " is done"));
             return new Outcome(Status.DONE, Optional.empty(), Optional.of(file));
