@@ -7,7 +7,7 @@
     <!-- JitPack serves this repository under com.github.BotMakerDev, so the build's coordinate is the published one. -->
     <groupId>com.github.BotMakerDev</groupId>
     <artifactId>sluice</artifactId>
-    <version>0.2.0</version>
+    <version>0.2.1-SNAPSHOT</version>
 
     <name>sluice</name>
     <description>
