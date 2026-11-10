@@ -1,10 +1,14 @@
 package com.botmaker.sluice.github;
 
+import com.botmaker.sluice.Git;
 import com.botmaker.sluice.Proc;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,6 +23,11 @@ public interface GitHub {
     record Repo(String owner, String name) {
 
         private static final Pattern REMOTE = Pattern.compile("github\\.com[:/]([^/\\s]+)/([^/\\s]+?)(?:\\.git)?/?$");
+
+        /** The repository {@code checkout}'s {@code origin} names; empty when it has none or it is not on GitHub. */
+        public static Optional<Repo> ofCheckout(Path checkout) {
+            return Git.line(checkout, "remote", "get-url", "origin").flatMap(Repo::ofRemote);
+        }
 
         /** The repository a git remote's url names, https or ssh; empty when it is not on GitHub. */
         public static Optional<Repo> ofRemote(String url) {
@@ -76,6 +85,47 @@ public interface GitHub {
         /** Its commit, short. */
         public String commit() {
             return sha.length() > 7 ? sha.substring(0, 7) : sha;
+        }
+    }
+
+    /**
+     * What a branch's runs say of a checkout.
+     *
+     * @param newestFinished each workflow's newest finished run that answers for it: neither cancelled nor of a
+     *                       workflow file the checkout no longer has; by workflow, the newest first
+     * @param running        whether a run newer than its workflow's newest finished one is still going
+     */
+    record BranchRuns(Map<String, Run> newestFinished, boolean running) {
+
+        public BranchRuns {
+            newestFinished = Collections.unmodifiableMap(new LinkedHashMap<>(newestFinished));
+        }
+
+        /** {@code runs}, newest first, read for {@code checkout}. */
+        public static BranchRuns of(List<Run> runs, Path checkout) {
+            Map<String, Run> newest = new LinkedHashMap<>();
+            boolean running = false;
+            for (Run run : runs) {
+                if (run.finished() && run.cancelled() || run.removedFrom(checkout)) {
+                    continue;
+                }
+                if (run.finished()) {
+                    newest.putIfAbsent(run.workflow(), run);
+                } else if (!newest.containsKey(run.workflow())) {
+                    running = true;
+                }
+            }
+            return new BranchRuns(newest, running);
+        }
+
+        /** The newest finished runs that failed. */
+        public List<Run> red() {
+            return newestFinished.values().stream().filter(run -> !run.green()).toList();
+        }
+
+        /** Whether one of the newest finished runs built {@code sha}. */
+        public boolean built(Optional<String> sha) {
+            return newestFinished.values().stream().anyMatch(run -> sha.equals(Optional.of(run.sha())));
         }
     }
 

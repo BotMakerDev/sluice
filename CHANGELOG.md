@@ -5,6 +5,21 @@ All notable changes to this project are documented here, in the format of
 
 ## [Unreleased]
 
+### Added
+
+- What a program around sluice needs, in `sluice-core`:
+  - `ConfigLoader.check(text, label)` gives every problem of a `sluice.yml` at once (`ConfigProblem`: key path,
+    message, line), YAML syntax errors included; `parse` still refuses the first one, word for word.
+  - `ConfigDocument` edits a `sluice.yml` by key path (`set`, `remove`) and keeps the file as it was written:
+    comments, quoting, flow or block style. An edit changes only the lines it touches; a document saved unedited is
+    byte for byte the file it read.
+  - `Release.preview(umbrella, requests, options)` decides and runs the gates, and tags nothing: its `Preview`
+    holds the plan and the verdicts.
+  - `ReleaseLogs.list(umbrella)` lists the runs under `releases/`, the newest first, each with its log, state and
+    how it ended; `ReleaseLogs.read(file)` reads one run by either of its files.
+  - `ModuleStatus` asks of one module what the gates ask: its newest tag, its CI on the release branch, its publish
+    target's build of a release, and its pom pins against its upstreams' versions.
+
 ### Changed
 
 - sluice is two Maven modules at one version: `core` (`sluice-core`, the library, which prints nothing) and `cli`

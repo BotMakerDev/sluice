@@ -1,5 +1,7 @@
 package com.botmaker.sluice.execute;
 
+import com.botmaker.sluice.Level;
+import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.execute.Release.Outcome;
 import com.botmaker.sluice.execute.Release.Status;
 import com.botmaker.sluice.testing.FixtureUmbrella;
@@ -9,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static com.botmaker.sluice.execute.ReleaseFixture.EXECUTE;
 import static com.botmaker.sluice.execute.ReleaseFixture.PREVIEW;
@@ -20,6 +23,7 @@ import static com.botmaker.sluice.execute.ReleaseFixture.run;
 import static com.botmaker.sluice.execute.ReleaseFixture.served;
 import static com.botmaker.sluice.execute.ReleaseFixture.show;
 import static com.botmaker.sluice.execute.ReleaseFixture.tags;
+import static com.botmaker.sluice.execute.ReleaseFixture.wiring;
 import static com.botmaker.sluice.testing.GateFixture.probe;
 import static com.botmaker.sluice.testing.GateFixture.yamlList;
 import static com.botmaker.sluice.testing.PlainUmbrella.dep;
@@ -181,6 +185,47 @@ class ReleaseTest {
         ReleaseState.Entry a = StateFile.read(outcome.state().orElseThrow()).modules().getFirst();
         assertEquals(Stage.TAGGED, a.stage());
         assertTrue(a.detail().contains("the after-tag step failed (exit 3)"), a.detail());
+    }
+
+    @Test
+    void previewGivesThePlanAndTheGatesOnly() {
+        FixtureUmbrella umbrella = pinned(tmp);
+        String pomBefore = read(umbrella.dir("b").resolve("pom.xml"));
+
+        Release.Preview preview = Release.preview(umbrella.root(), Requests.parse(List.of("a", "b"),
+                Optional.empty()), PREVIEW, wiring(served()));
+
+        assertEquals(List.of("a", "b"), preview.plan().releasing().keySet().stream().map(m -> m.name()).toList());
+        assertFalse(preview.verdicts().isEmpty());
+        assertFalse(preview.refused(), preview.verdicts().toString());
+        assertFalse(Files.exists(umbrella.root().resolve(StateFile.DIR)));
+        assertEquals(List.of("v1.0.0"), tags(umbrella, "a"));
+        assertEquals(pomBefore, read(umbrella.dir("b").resolve("pom.xml")));
+    }
+
+    @Test
+    void previewSaysARefusalTheRunWouldMeet() throws Exception {
+        FixtureUmbrella umbrella = pinned(tmp);
+        Files.writeString(umbrella.dir("b").resolve("src/B.java"), "class B { int notCommitted; }\n");
+
+        Release.Preview preview = Release.preview(umbrella.root(), Requests.parse(List.of("a", "b"),
+                Optional.empty()), PREVIEW, wiring(served()));
+
+        assertTrue(preview.refused(), preview.verdicts().toString());
+        assertTrue(preview.verdicts().stream().anyMatch(v -> v.stops() && v.gate().equals("clean")),
+                preview.verdicts().toString());
+    }
+
+    @Test
+    void previewOfNothingGatesNothing() {
+        FixtureUmbrella umbrella = FixtureUmbrella.create(tmp).module("a", pom("a", "1.0.1-SNAPSHOT", ""))
+                .tag("a", "v1.0.0").push("a");
+
+        Release.Preview preview = Release.preview(umbrella.root(), Requests.parse(List.of(), Optional.of(
+                Level.MINOR)), PREVIEW, wiring(served()));
+
+        assertTrue(preview.plan().releasing().isEmpty(), preview.plan().toString());
+        assertEquals(List.of(), preview.verdicts());
     }
 
     @Test

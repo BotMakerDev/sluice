@@ -146,6 +146,44 @@ public final class Release {
     }
 
     /**
+     * What a run would release and what its gates say of it, for a person to read before releasing.
+     *
+     * @param verdicts empty when the plan releases nothing: a run then gates nothing either
+     */
+    public record Preview(Plan plan, List<GateVerdict> verdicts) {
+
+        public Preview {
+            verdicts = List.copyOf(verdicts);
+        }
+
+        /** Whether a run of the same request would stop at its gates. */
+        public boolean refused() {
+            return Gates.refused(verdicts);
+        }
+    }
+
+    /**
+     * Decides {@code requests} and runs every gate over the plan, as a run would before its first tag, and stops
+     * there: no step is echoed, nothing is written or tagged. {@link Options#execute} is not read.
+     */
+    public static Preview preview(Path umbrella, Requests requests, Options options) {
+        return preview(umbrella, requests, options, Wiring.real());
+    }
+
+    static Preview preview(Path umbrella, Requests requests, Options options, Wiring wiring) {
+        Config config = ConfigLoader.load(umbrella);
+        Graph graph = Graph.build(UmbrellaLayout.of(umbrella), config);
+        Plan plan = Decider.decide(graph, config, requests, options.withDependents());
+        if (plan.releasing().isEmpty()) {
+            return new Preview(plan, List.of());
+        }
+        GateContext ctx = new GateContext(umbrella, graph, plan, config, new Runner(true, line -> {
+        }), options.force());
+        return new Preview(plan, Gates.run(ctx, Gates.standard(config, wiring.targets().apply(config),
+                wiring.github().get())));
+    }
+
+    /**
      * Goes on with the newest run under {@code releases/} that did not finish: each module from the stage it
      * reached. A module whose target failed to build its tag is released again at its next patch, since a tag is
      * final. Only the clean-tree gate runs again; the rest held when the run started.

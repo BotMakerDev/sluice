@@ -33,7 +33,11 @@ final class StateFile {
     static final String DIR = "releases";
 
     private static final DateTimeFormatter MINUTE = DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmm");
-    private static final Pattern NAME = Pattern.compile("(\\d{4}-\\d{2}-\\d{2}-\\d{4})(?:-(\\d+))?\\.json");
+    /** A run's file name: its minute, its number in that minute, its extension. */
+    static final Pattern NAME = Pattern.compile("(\\d{4}-\\d{2}-\\d{2}-\\d{4})(?:-(\\d+))?\\.(json|md)");
+    /** Runs by when they started, the oldest first. */
+    static final Comparator<Path> ORDER = Comparator.comparing((Path file) -> match(file).group(1))
+            .thenComparingInt(file -> match(file).group(2) == null ? 1 : Integer.parseInt(match(file).group(2)));
 
     private StateFile() {
     }
@@ -57,16 +61,15 @@ final class StateFile {
             return Optional.empty();
         }
         try (Stream<Path> files = Files.list(dir)) {
-            return files.filter(file -> NAME.matcher(file.getFileName().toString()).matches())
-                    .max(Comparator.comparing((Path file) -> match(file).group(1))
-                            .thenComparingInt(file -> match(file).group(2) == null
-                                    ? 1 : Integer.parseInt(match(file).group(2))));
+            return files.filter(file -> file.getFileName().toString().endsWith(".json")
+                            && NAME.matcher(file.getFileName().toString()).matches())
+                    .max(ORDER);
         } catch (IOException e) {
             throw new Refusal(dir + ": could not be listed (" + e.getMessage() + ")");
         }
     }
 
-    private static Matcher match(Path file) {
+    static Matcher match(Path file) {
         Matcher matcher = NAME.matcher(file.getFileName().toString());
         matcher.matches();
         return matcher;

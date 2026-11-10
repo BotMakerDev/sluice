@@ -1,16 +1,13 @@
 package com.botmaker.sluice.gate;
 
 import com.botmaker.sluice.model.Edge;
-import com.botmaker.sluice.model.Pin;
-import com.botmaker.sluice.model.PinReader;
 import com.botmaker.sluice.spi.Gate;
 import com.botmaker.sluice.spi.GateContext;
+import com.botmaker.sluice.status.ModuleStatus;
+import com.botmaker.sluice.status.ModuleStatus.PinState;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * On the release branch every pom pin names its upstream's version there. A pin left on an older version makes
@@ -30,20 +27,16 @@ public final class PinsAtMainGate implements Gate {
         List<GateVerdict> verdicts = new ArrayList<>();
         int checked = 0;
         for (Edge edge : ctx.graph().edges()) {
-            Optional<String> upstream = edge.upstream().version();
-            if (upstream.isEmpty()) {
+            if (edge.upstream().version().isEmpty()) {
                 continue;
             }
-            for (Pin pin : edge.pins()) {
-                if (pin instanceof Pin.Text) {
-                    continue;
-                }
+            for (PinState pin : ModuleStatus.pins(edge)) {
                 checked++;
-                Optional<String> value = value(pin);
-                if (!value.equals(upstream)) {
+                if (!pin.current()) {
                     verdicts.add(refused(edge.downstream() + " pins " + edge.upstream() + " at "
-                                    + value.orElse("nothing readable") + " in " + ctx.said(pin.file()) + ", and "
-                                    + edge.upstream() + " is at " + upstream.get() + " on " + branch,
+                                    + pin.held().orElse("nothing readable") + " in " + ctx.said(pin.pin().file())
+                                    + ", and " + edge.upstream() + " is at " + pin.upstreamVersion().orElseThrow()
+                                    + " on " + branch,
                             "     sluice --sync-pins --execute moves it."));
                 }
             }
@@ -52,13 +45,5 @@ public final class PinsAtMainGate implements Gate {
             verdicts.add(ok("every pin names its upstream's version on " + branch + " (" + checked + ")"));
         }
         return verdicts;
-    }
-
-    private static Optional<String> value(Pin pin) {
-        try {
-            return PinReader.value(pin, Files.readString(pin.file()));
-        } catch (IOException e) {
-            return Optional.empty();
-        }
     }
 }

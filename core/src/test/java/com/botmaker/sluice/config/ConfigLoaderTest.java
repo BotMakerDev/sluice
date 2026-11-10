@@ -21,6 +21,43 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConfigLoaderTest {
 
     @Test
+    void checkFindsEveryProblemWithItsLine() {
+        String text = """
+                tagg: x
+                branch: [main]
+                modules:
+                  a:
+                    alais: x
+                  b:
+                    kind: wrong
+                edges:
+                  - from: a
+                    to: b
+                """;
+        List<ConfigProblem> problems = ConfigLoader.check(text, "sluice.yml");
+        assertEquals(List.of("tagg", "branch", "modules.a.alais", "modules.b.kind", "edges[0]"),
+                problems.stream().map(ConfigProblem::path).toList(), problems.toString());
+        assertEquals(List.of(1, 2, 5, 7, 9), problems.stream().map(ConfigProblem::line).toList());
+        assertTrue(problems.getLast().message().contains("needs why"), problems.getLast().message());
+        // parse refuses one of them, in the same words.
+        assertEquals(problems.getFirst().message(),
+                assertThrows(Refusal.class, () -> ConfigLoader.parse(text, "sluice.yml")).getMessage());
+    }
+
+    @Test
+    void checkOfAGoodFileIsEmpty() {
+        assertEquals(List.of(), ConfigLoader.check("branch: main\nmodules:\n  a:\n", "sluice.yml"));
+    }
+
+    @Test
+    void checkSaysWhereTheYamlBreaks() {
+        List<ConfigProblem> problems = ConfigLoader.check("branch: main\nmodules: [a\n", "sluice.yml");
+        assertEquals(1, problems.size(), problems.toString());
+        assertTrue(problems.getFirst().message().contains("not valid YAML"), problems.toString());
+        assertTrue(problems.getFirst().line() > 0, problems.toString());
+    }
+
+    @Test
     void absentFileGivesDefaults(@TempDir Path tmp) {
         Config config = ConfigLoader.load(tmp);
 

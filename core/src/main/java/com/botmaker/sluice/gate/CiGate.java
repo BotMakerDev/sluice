@@ -2,6 +2,7 @@ package com.botmaker.sluice.gate;
 
 import com.botmaker.sluice.Git;
 import com.botmaker.sluice.github.GitHub;
+import com.botmaker.sluice.github.GitHub.BranchRuns;
 import com.botmaker.sluice.github.GitHub.Repo;
 import com.botmaker.sluice.github.GitHub.Run;
 import com.botmaker.sluice.model.Edge;
@@ -12,7 +13,6 @@ import com.botmaker.sluice.spi.GateContext;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,7 +32,7 @@ public final class CiGate implements Gate {
     private final Function<Module, Optional<Repo>> repos;
 
     public CiGate(Optional<GitHub> github) {
-        this(github, module -> Git.line(module.dir().dir(), "remote", "get-url", "origin").flatMap(Repo::ofRemote));
+        this(github, module -> Repo.ofCheckout(module.dir().dir()));
     }
 
     CiGate(Optional<GitHub> github, Function<Module, Optional<Repo>> repos) {
@@ -72,17 +72,6 @@ public final class CiGate implements Gate {
         return verdicts;
     }
 
-    /** Each workflow's newest finished run that answers for the module: neither cancelled nor of a removed file. */
-    private static Map<String, Run> newestFinished(Module module, List<Run> runs) {
-        Map<String, Run> newest = new LinkedHashMap<>();
-        for (Run run : runs) {
-            if (run.finished() && !run.cancelled() && !run.removedFrom(module.dir().dir())) {
-                newest.putIfAbsent(run.workflow(), run);
-            }
-        }
-        return newest;
-    }
-
     /**
      * {@code upstream}'s newest green run, when every workflow of it is green now and that run ended after each
      * of {@code red}: a dependent's CI builds its upstreams' branches, so it may have failed in one fixed since.
@@ -94,7 +83,8 @@ public final class CiGate implements Gate {
         if (failed.isEmpty() || red.stream().anyMatch(run -> run.updated().isEmpty())) {
             return Optional.empty();
         }
-        Map<String, Run> newest = runsOf.apply(upstream).map(runs -> newestFinished(upstream, runs)).orElse(Map.of());
+        Map<String, Run> newest = runsOf.apply(upstream)
+                .map(runs -> BranchRuns.of(runs, upstream.dir().dir()).newestFinished()).orElse(Map.of());
         if (newest.isEmpty() || !newest.values().stream().allMatch(Run::green)) {
             return Optional.empty();
         }
@@ -105,25 +95,14 @@ public final class CiGate implements Gate {
     /** The rule over a module's runs, newest first. */
     private GateVerdict verdict(GateContext ctx, Module module, String branch, List<Run> runs,
                                 Function<Module, Optional<List<Run>>> runsOf) {
-        Map<String, Run> newestFinished = new LinkedHashMap<>();
-        boolean running = false;
-        for (Run run : runs) {
-            if (run.finished() && run.cancelled() || run.removedFrom(module.dir().dir())) {
-                continue;
-            }
-            if (run.finished()) {
-                newestFinished.putIfAbsent(run.workflow(), run);
-            } else if (!newestFinished.containsKey(run.workflow())) {
-                running = true;
-            }
-        }
-        String also = running ? " (a newer run is still going)" : "";
+        BranchRuns read = BranchRuns.of(runs, module.dir().dir());
+        Map<String, Run> newestFinished = read.newestFinished();
+        String also = read.running() ? " (a newer run is still going)" : "";
         if (newestFinished.isEmpty()) {
             return skipped(module + ": no finished CI run on " + branch + also + ", CI was not checked");
         }
-        List<Run> red = newestFinished.values().stream().filter(run -> !run.green()).toList();
-        Optional<String> head = Git.line(module.dir().dir(), "rev-parse", "HEAD");
-        if (red.isEmpty() && newestFinished.values().stream().noneMatch(run -> head.equals(Optional.of(run.sha())))) {
+        List<Run> red = read.red();
+        if (red.isEmpty() && !read.built(Git.line(module.dir().dir(), "rev-parse", "HEAD"))) {
             return skipped(module + ": CI on " + branch + " is green at "
                     + newestFinished.values().iterator().next().commit() + also
                     + ", but no finished run built its HEAD: CI was not checked");
