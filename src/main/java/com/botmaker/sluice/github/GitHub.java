@@ -61,10 +61,20 @@ public interface GitHub {
     Optional<List<Run>> runs(Repo repo, String branch);
 
     /**
+     * Creates the release page of {@code tag}, its notes {@code body}. A page the tag already has counts as
+     * created: a resumed release asks again.
+     *
+     * @return empty when it was created, else why not
+     */
+    default Optional<String> release(Repo repo, String tag, String body) {
+        return Optional.of("this GitHub client creates no release");
+    }
+
+    /**
      * GitHub with the token of this environment: {@code GITHUB_TOKEN}, else what {@code gh auth token} answers.
      * Empty when there is neither.
      */
-    static Optional<GitHub> fromEnvironment() {
+    public static Optional<GitHub> fromEnvironment() {
         String token = System.getenv("GITHUB_TOKEN");
         if (token == null || token.isBlank()) {
             token = Proc.onPath("gh")

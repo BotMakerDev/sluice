@@ -27,3 +27,19 @@ All notable changes to this project are documented here, in the format of
   it. The `target` gate: on JitPack, every script `jitpack.yml` runs is committed, and every pinned Maven plugin
   runs on the build's Maven, read from the plugin's own pom.
 - `sluice.yml`, read strictly: an unknown key or a bad value is refused, naming where it is.
+- The release itself, a preview unless asked to execute. Each module, in tag order: the release commit (its
+  version, each pin at its upstream's release, the `## [Unreleased]` changelog heading stamped, the
+  `before-release-commit` steps), the tag, the push of branch and tag together, a GitHub release page with the
+  version's notes (`github-releases`, on by default, only with a token), the `after-tag` steps, the wait for its
+  target when a later module resolves it, then back to the next snapshot: pins to their upstreams' branch
+  versions, `after-release` properties set, the `after-snapshot` steps, pushed, and each dependent the run does
+  not release following to the snapshot in a commit of its own. One umbrella commit at the end holds the moved
+  pointers, the run's log and its state.
+- Pins move through `versions-maven-plugin` (`set`, `set-property`, `use-dep-version`), a `<parent>` and a text
+  pin as text, and every move is read back.
+- `releases/<YYYY-MM-DD-HHMM>.json`, the run's state after every step, beside its log; resume goes on from the
+  newest, a module whose target failed to build its final tag released again at its next patch.
+- One release at a time per umbrella: a lock in its git directory, taken over from a run of this host that no
+  longer runs, refused otherwise.
+- Sync pins: each pom pin moved to its upstream's version on the branch, one local commit per module.
+- `builds-at-pins` builds a module pinning by a literal or a `<parent>` too, those pins moved in the clone.

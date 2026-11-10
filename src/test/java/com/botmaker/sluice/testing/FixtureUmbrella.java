@@ -34,6 +34,7 @@ public final class FixtureUmbrella {
         FixtureUmbrella fixture = new FixtureUmbrella(tmp);
         fixture.mkdirs(fixture.root);
         git(fixture.root, "init", "-q");
+        configure(fixture.root);
         fixture.writeFile(fixture.root.resolve("README.md"), "fixture\n");
         git(fixture.root, "add", "-A");
         git(fixture.root, "commit", "-q", "-m", "umbrella");
@@ -69,8 +70,20 @@ public final class FixtureUmbrella {
         git(seed, "push", "-q", "origin", "main");
         git(root, "submodule", "add", "-q", url, path);
         git(dir(path), "switch", "-q", "main");
+        configure(dir(path));
         git(root, "commit", "-q", "-m", "add " + path);
         return this;
+    }
+
+    /**
+     * Gives a repository its own identity and no signing, so a release's commits and tags, which run git without
+     * the fixture's settings, work whatever the developer's global configuration says.
+     */
+    private static void configure(Path dir) {
+        git(dir, "config", "user.name", "fixture");
+        git(dir, "config", "user.email", "fixture@example.invalid");
+        git(dir, "config", "commit.gpgsign", "false");
+        git(dir, "config", "tag.gpgsign", "false");
     }
 
     /** Writes {@code file} in a submodule's checkout and commits it there (not in the umbrella). */

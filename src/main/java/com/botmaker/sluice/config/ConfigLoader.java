@@ -38,7 +38,7 @@ public final class ConfigLoader {
     public static final String FILE = "sluice.yml";
 
     private static final Set<String> TOP = Set.of("target", "branch", "tag", "relevance", "modules", "text-pins",
-            "edges", "after-release", "changelog", "gates", "steps");
+            "edges", "after-release", "changelog", "gates", "steps", "github-releases");
 
     private ConfigLoader() {
     }
@@ -95,12 +95,19 @@ public final class ConfigLoader {
                 tag,
                 ignore,
                 modules,
-                optional(top, "text-pins").map(n -> n.list().stream().map(ConfigLoader::textPin).toList()).orElse(List.of()),
+                optional(top, "text-pins").map(n -> n.list().stream().map(ConfigLoader::textPin).toList())
+                        .orElse(List.of()),
                 optional(top, "edges").map(n -> n.list().stream().map(ConfigLoader::edge).toList()).orElse(List.of()),
                 afterRelease,
                 optional(top, "changelog").map(ConfigLoader::changelog).orElse(ChangelogConfig.OFF),
                 optional(top, "gates").map(n -> n.list().stream().map(ConfigLoader::gate).toList()).orElse(List.of()),
-                optional(top, "steps").map(n -> n.list().stream().map(ConfigLoader::step).toList()).orElse(List.of()));
+                optional(top, "steps").map(n -> n.list().stream().map(ConfigLoader::step).toList()).orElse(List.of()),
+                optional(top, "github-releases").map(n -> {
+                    if (n.value() instanceof Boolean on) {
+                        return on;
+                    }
+                    throw n.wrong("must be true or false");
+                }).orElse(defaults.githubReleases()));
     }
 
     private static Target target(Node node) {

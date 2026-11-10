@@ -26,11 +26,12 @@ import java.util.stream.Stream;
  * @param changelog       the Keep a Changelog feature
  * @param gates           project gates, each a command
  * @param steps           project steps, each a command at a point of the release
+ * @param githubReleases  whether each tag of a module on GitHub gets a release page, its changelog's notes
  */
 public record Config(Target target, String branch, String tagPattern, List<String> relevanceIgnore,
                      Map<String, ModuleConfig> modules, List<TextPinConfig> textPins, List<EdgeConfig> edges,
                      Map<String, Map<String, String>> afterRelease, ChangelogConfig changelog,
-                     List<CommandConfig> gates, List<StepConfig> steps) {
+                     List<CommandConfig> gates, List<StepConfig> steps, boolean githubReleases) {
 
     public static final List<String> DEFAULT_IGNORE = List.of("**/*.md", "docs/**");
 
@@ -47,7 +48,7 @@ public record Config(Target target, String branch, String tagPattern, List<Strin
     /** What an umbrella without a {@code sluice.yml} gets. */
     public static Config defaults() {
         return new Config(new Target.None(), "main", "v{version}", DEFAULT_IGNORE, Map.of(), List.of(), List.of(),
-                Map.of(), ChangelogConfig.OFF, List.of(), List.of());
+                Map.of(), ChangelogConfig.OFF, List.of(), List.of(), true);
     }
 
     /** The settings of the submodule at {@code path}, none when the file gives it none. */

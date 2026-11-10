@@ -1,8 +1,10 @@
 package com.botmaker.sluice.gate;
 
 import com.botmaker.sluice.Git;
+import com.botmaker.sluice.PinMoves;
 import com.botmaker.sluice.Proc;
 import com.botmaker.sluice.Refusal;
+import com.botmaker.sluice.Runner;
 import com.botmaker.sluice.Version;
 import com.botmaker.sluice.decide.Decision;
 import com.botmaker.sluice.model.Edge;
@@ -42,8 +44,9 @@ import java.util.stream.Stream;
  *       builds against their releases, which may lack what the branch has.</li>
  * </ol>
  *
- * <p>The second is skipped, and says so, for a module that pins an upstream this run releases (that release is
- * not published yet) or pins one by anything other than a property.
+ * <p>A property pin is given to the build as {@code -D}; a literal or parent pin is moved in the clone, as the
+ * release commit moves it. The second check is skipped, and says so, for a module that pins an upstream this run
+ * releases: that release is not published yet.
  */
 public final class BuildsAtPinsGate implements Gate {
 
@@ -91,7 +94,7 @@ public final class BuildsAtPinsGate implements Gate {
                     verdicts.add(skipped(module + ": not built at its pins (" + unbuildable.get() + ")"));
                     continue;
                 }
-                Map<String, String> pins = pins(ctx, pinned);
+                Map<Pin, String> pins = pins(ctx, pinned);
                 if (pins.isEmpty()) {
                     continue;
                 }
@@ -105,8 +108,8 @@ public final class BuildsAtPinsGate implements Gate {
                 Optional<Proc.Result> built = compile(module, pins, repository);
                 verdicts.add(built.isPresent()
                         ? verdict(module, pins, built.get())
-                        : skipped(module + ": its HEAD could not be copied or the build was stopped, not built at "
-                                + "its pins"));
+                        : skipped(module + ": its HEAD could not be copied, its pins could not be moved there, or "
+                                + "the build was stopped; not built at its pins"));
             }
         } catch (IOException e) {
             verdicts.add(skipped("no temporary directory could be made (" + e.getMessage() + ")"));
@@ -170,19 +173,13 @@ public final class BuildsAtPinsGate implements Gate {
     private static Optional<String> unbuildable(List<Edge> pinned, Set<Module> releasing) {
         List<String> unpublished = pinned.stream().map(Edge::upstream).filter(releasing::contains)
                 .map(Module::name).toList();
-        if (!unpublished.isEmpty()) {
-            return Optional.of(String.join(", ", unpublished) + " released by this run, not published yet");
-        }
-        return pinned.stream()
-                .filter(edge -> edge.pins().stream()
-                        .anyMatch(pin -> !(pin instanceof Pin.Property) && !(pin instanceof Pin.Text)))
-                .map(edge -> "its pin of " + edge.upstream() + " is not a property")
-                .findFirst();
+        return unpublished.isEmpty() ? Optional.empty()
+                : Optional.of(String.join(", ", unpublished) + " released by this run, not published yet");
     }
 
-    /** Each pin's property and the release it would name; an upstream never released has none. */
-    private Map<String, String> pins(GateContext ctx, List<Edge> pinned) {
-        Map<String, String> pins = new LinkedHashMap<>();
+    /** Each pom pin and the release it would name; an upstream never released has none. */
+    private Map<Pin, String> pins(GateContext ctx, List<Edge> pinned) {
+        Map<Pin, String> pins = new LinkedHashMap<>();
         for (Edge edge : pinned) {
             Version newest = ctx.plan().decision(edge.upstream()).map(Decision::base).orElse(Version.ZERO);
             if (newest.equals(Version.ZERO)) {
@@ -190,31 +187,59 @@ public final class BuildsAtPinsGate implements Gate {
             }
             String release = targets.apply(edge.upstream()).spelling().spell(newest, ctx.config().tagPattern());
             for (Pin pin : edge.pins()) {
-                if (pin instanceof Pin.Property property) {
-                    pins.put(property.name(), release);
+                if (!(pin instanceof Pin.Text)) {
+                    pins.put(pin, release);
                 }
             }
         }
         return pins;
     }
 
+    /** {@code pin} in the clone at {@code tree} of the module at {@code dir}. */
+    private static Pin rebased(Pin pin, Path dir, Path tree) {
+        Function<Path, Path> in = file -> tree.resolve(dir.toAbsolutePath().normalize()
+                .relativize(file.toAbsolutePath().normalize()));
+        return switch (pin) {
+            case Pin.Property property -> new Pin.Property(in.apply(property.pom()), property.name());
+            case Pin.Literal literal -> new Pin.Literal(in.apply(literal.pom()), literal.dep());
+            case Pin.Parent parent -> new Pin.Parent(in.apply(parent.pom()));
+            case Pin.Text text -> new Pin.Text(in.apply(text.file()), text.match(), text.spelling());
+        };
+    }
+
     /**
      * {@code mvn compile} of the module's {@code HEAD} in a throwaway clone, with its pins; empty when the build
      * could not be made. A clone, not a worktree: it leaves the module's repository as it was.
      */
-    private Optional<Proc.Result> compile(Module module, Map<String, String> pins, Path repository)
+    private Optional<Proc.Result> compile(Module module, Map<Pin, String> pins, Path repository)
             throws IOException {
         Path tree = Files.createTempDirectory("sluice-at-pins-");
         try {
-            if (!Git.run(module.dir().dir(), "clone", "--quiet", "--no-checkout", ".", tree.toString()).ok()
+            Path dir = module.dir().dir();
+            if (!Git.run(dir, "clone", "--quiet", "--no-checkout", ".", tree.toString()).ok()
                     || !Git.run(tree, "checkout", "--quiet", "--detach",
-                    Git.line(module.dir().dir(), "rev-parse", "HEAD").orElse("HEAD")).ok()) {
+                    Git.line(dir, "rev-parse", "HEAD").orElse("HEAD")).ok()) {
                 return Optional.empty();
             }
             List<String> argv = new ArrayList<>(List.of("mvn", "-B", "-q"));
             argv.addAll(mavenArgs);
             argv.add("-Dmaven.repo.local=" + repository);
-            pins.forEach((property, release) -> argv.add("-D" + property + "=" + release));
+            // The clone's own pins move as the release commit moves them, the parent first; the developer's
+            // local repository serves the plugin that moves them, never the build.
+            PinMoves moves = new PinMoves(new Runner(false, line -> { }), mavenArgs);
+            try {
+                pins.entrySet().stream().filter(pin -> pin.getKey() instanceof Pin.Parent)
+                        .forEach(pin -> moves.move(rebased(pin.getKey(), dir, tree), pin.getValue()));
+                pins.entrySet().stream().filter(pin -> pin.getKey() instanceof Pin.Literal)
+                        .forEach(pin -> moves.move(rebased(pin.getKey(), dir, tree), pin.getValue()));
+            } catch (Refusal unmoved) {
+                return Optional.empty();
+            }
+            pins.forEach((pin, release) -> {
+                if (pin instanceof Pin.Property property) {
+                    argv.add("-D" + property.name() + "=" + release);
+                }
+            });
             argv.add("compile");
             Proc.Result run = Proc.run(tree, argv);
             return run.exit() == Proc.INTERRUPTED || run.exit() == Proc.NOT_STARTED
@@ -224,8 +249,8 @@ public final class BuildsAtPinsGate implements Gate {
         }
     }
 
-    private GateVerdict verdict(Module module, Map<String, String> pins, Proc.Result run) {
-        String said = pins.entrySet().stream().map(pin -> pin.getKey() + "=" + pin.getValue())
+    private GateVerdict verdict(Module module, Map<Pin, String> pins, Proc.Result run) {
+        String said = pins.entrySet().stream().map(pin -> said(pin.getKey()) + "=" + pin.getValue())
                 .reduce((a, b) -> a + ", " + b).orElse("");
         if (run.ok()) {
             return ok(module + ": builds at its pins (" + said + ")");
@@ -234,6 +259,15 @@ public final class BuildsAtPinsGate implements Gate {
         return refused(module + " does not build at the pins its tag would carry (" + said + ")",
                 "     Built from an empty local repository, as its publish target builds it.\n"
                         + Gates.quoted(errors.isEmpty() ? run.out() : errors));
+    }
+
+    private static String said(Pin pin) {
+        return switch (pin) {
+            case Pin.Property property -> property.name();
+            case Pin.Literal literal -> literal.dep().artifactId();
+            case Pin.Parent ignored -> "parent";
+            case Pin.Text text -> text.file().getFileName().toString();
+        };
     }
 
     private static void delete(Path dir) {

@@ -1,5 +1,6 @@
 package com.botmaker.sluice.github;
 
+import com.botmaker.sluice.Json;
 import org.snakeyaml.engine.v2.api.Load;
 import org.snakeyaml.engine.v2.api.LoadSettings;
 
@@ -36,6 +37,27 @@ final class GitHubRest implements GitHub {
                 + URLEncoder.encode(branch, StandardCharsets.UTF_8)).map(GitHubRest::runs);
     }
 
+    @Override
+    public Optional<String> release(Repo repo, String tag, String body) {
+        String json = "{\"tag_name\": " + Json.quote(tag) + ", \"name\": " + Json.quote(tag) + ", \"body\": "
+                + Json.quote(body) + "}";
+        HttpRequest request = request("/repos/" + repo.owner() + "/" + repo.name() + "/releases")
+                .POST(HttpRequest.BodyPublishers.ofString(json)).build();
+        try {
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 201 || response.statusCode() == 422
+                    && response.body().contains("already_exists")) {
+                return Optional.empty();
+            }
+            return Optional.of("GitHub answered " + response.statusCode());
+        } catch (IOException e) {
+            return Optional.of("GitHub did not answer (" + e.getMessage() + ")");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Optional.of("interrupted");
+        }
+    }
+
     /** The runs of an answer; JSON is read as the YAML it also is. */
     static List<Run> runs(String json) {
         List<Run> runs = new ArrayList<>();
@@ -60,12 +82,15 @@ final class GitHubRest implements GitHub {
         return value == null ? "" : value.toString();
     }
 
-    private Optional<String> get(String path) {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(API + path)).timeout(TIMEOUT)
+    private HttpRequest.Builder request(String path) {
+        return HttpRequest.newBuilder(URI.create(API + path)).timeout(TIMEOUT)
                 .header("Authorization", "Bearer " + token)
                 .header("Accept", "application/vnd.github+json")
-                .header("X-GitHub-Api-Version", "2022-11-28")
-                .GET().build();
+                .header("X-GitHub-Api-Version", "2022-11-28");
+    }
+
+    private Optional<String> get(String path) {
+        HttpRequest request = request(path).GET().build();
         try {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             return response.statusCode() == 200 ? Optional.of(response.body()) : Optional.empty();

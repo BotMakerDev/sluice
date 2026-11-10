@@ -4,10 +4,9 @@ Open work only. The plan for v0.1.0 is `docs/superpowers/plans/2026-11-10-sluice
 
 - A child pom of a multi-module repository: its version and parent moved by a release still read as a change.
 - Deciding fetches each module's tags one after the other; fetch them together.
-- `builds-at-pins` skips a module that pins an upstream released by the same run, or pins one by a literal or a
-  `<parent>`: build those too, moving the pins in the throwaway tree with the release's own mover.
+- `builds-at-pins` skips a module that pins an upstream released by the same run: that release is published only
+  once the run tags it.
 - `builds-at-pins` downloads every plugin and dependency into its empty local repository on each run.
-- The `lock` gate; the release itself with state, lock and resume.
 - A JitPack coordinate of a multi-module repository (`com.github.owner.repo:module`): the wait asks for the root
   artifact's address only.
 - The JitPack plugin check reads the module's own pom only: a plugin a `<parent>` or its `pluginManagement` pins

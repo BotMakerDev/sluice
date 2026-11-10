@@ -81,18 +81,43 @@ public record Runner(boolean dryRun, Consumer<String> out, BooleanSupplier stop)
         if (dryRun) {
             return;
         }
-        String before;
-        try {
-            before = Files.readString(file);
-        } catch (IOException e) {
-            throw new Refusal(file + ": could not be read (" + e.getMessage() + ")");
-        }
+        String before = read(file);
         Matcher match = find.matcher(before);
         if (!match.find()) {
             throw new Refusal(file + ": nothing matches " + find.pattern());
         }
+        store(file, match.reset().replaceFirst(replacement));
+    }
+
+    /**
+     * Rewrites the first group of {@code find}'s first match in a file, and nothing around it: a text pin, whose
+     * pattern finds the version by its context. A pattern that matches nothing refuses, as {@link #replace} does.
+     */
+    public void replaceGroup(Path file, Pattern find, String value) {
+        out.accept("    $ replace group 1 of " + quoted(find.pattern()) + " with " + quoted(value) + " in "
+                + quoted(file.toString()));
+        if (dryRun) {
+            return;
+        }
+        String before = read(file);
+        Matcher match = find.matcher(before);
+        if (!match.find() || match.groupCount() < 1 || match.start(1) < 0) {
+            throw new Refusal(file + ": nothing matches " + find.pattern());
+        }
+        store(file, before.substring(0, match.start(1)) + value + before.substring(match.end(1)));
+    }
+
+    private static String read(Path file) {
         try {
-            Files.writeString(file, match.reset().replaceFirst(replacement));
+            return Files.readString(file);
+        } catch (IOException e) {
+            throw new Refusal(file + ": could not be read (" + e.getMessage() + ")");
+        }
+    }
+
+    private static void store(Path file, String content) {
+        try {
+            Files.writeString(file, content);
         } catch (IOException e) {
             throw new Refusal(file + ": could not be written (" + e.getMessage() + ")");
         }
