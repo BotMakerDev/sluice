@@ -20,6 +20,9 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      # The tests run Maven offline against the local repository; this fetches the one plugin they need there.
+      - name: Fetch versions-maven-plugin
+        run: mvn -B -q dependency:get -Dartifact=org.codehaus.mojo:versions-maven-plugin:2.18.0
       - name: Test
         run: mvn -B verify
 

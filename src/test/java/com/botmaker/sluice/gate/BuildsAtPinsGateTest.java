@@ -165,7 +165,7 @@ class BuildsAtPinsGateTest {
 
         GateVerdict verdict = only(check(gate, umbrella, Config.defaults(), "b"));
 
-        assertEquals(Status.OK, verdict.status(), verdict.refusal());
+        assertEquals(Status.OK, verdict.status(), verdict.line() + "\n" + verdict.refusal());
         assertEquals("", FixtureUmbrella.git(umbrella.dir("b"), "status", "--porcelain").out(),
                 "the module's checkout is as it was");
     }

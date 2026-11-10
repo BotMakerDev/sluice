@@ -34,7 +34,7 @@ class PinMovesTest {
         moves.move(new Pin.Text(tmp.resolve("V.java"), Pattern.compile("V = \"([^\"]+)\""), Spelling.VERSION), "1.0.0");
 
         assertEquals(5, said.size(), String.join("\n", said));
-        assertTrue(said.get(0).contains("mvn -B -q -o -f " + pom + " " + PinMoves.PLUGIN
+        assertTrue(said.get(0).contains("mvn -B -q -o -f " + Runner.quoted(pom.toString()) + " " + PinMoves.PLUGIN
                 + ":set -DnewVersion=1.2.3 -DgenerateBackupPoms=false"), said.get(0));
         assertTrue(said.get(1).contains(":set-property -Dproperty=a.version -DnewVersion=v1.0.0"), said.get(1));
         assertTrue(said.get(2).contains(":use-dep-version -Dincludes=g:a -DdepVersion=v1.0.0 -DforceVersion=true"),

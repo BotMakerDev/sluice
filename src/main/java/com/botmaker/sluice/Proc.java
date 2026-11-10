@@ -88,12 +88,39 @@ public final class Proc {
      * {@code git.exe} by itself but not {@code mvn.cmd}, which is how Maven installs on Windows.
      */
     private static List<String> resolved(List<String> argv) {
-        if (argv.isEmpty() || !isWindows() || argv.getFirst().contains(File.separator)) {
+        if (argv.isEmpty() || !isWindows()) {
             return argv;
         }
-        return find(argv.getFirst())
-                .map(path -> Stream.concat(Stream.of(path.toString()), argv.stream().skip(1)).toList())
-                .orElse(argv);
+        String program = argv.getFirst().contains(File.separator)
+                ? argv.getFirst() : find(argv.getFirst()).map(Path::toString).orElse(argv.getFirst());
+        String lower = program.toLowerCase(Locale.ROOT);
+        boolean batch = lower.endsWith(".cmd") || lower.endsWith(".bat");
+        return Stream.concat(Stream.of(program), argv.stream().skip(1).map(arg -> batch ? arg : windowsArg(arg)))
+                .toList();
+    }
+
+    /**
+     * One argument as a Windows program's C runtime splits its command line back into it. {@code ProcessBuilder}
+     * wraps an argument holding a space in quotes but leaves the quotes inside it as they are, so {@code 'q' "d"}
+     * would arrive as {@code 'q' d}. An argument holding a quote is written here already quoted, its quotes and the
+     * backslashes before them escaped, which {@code ProcessBuilder} passes as it is. A {@code .cmd} or {@code .bat}
+     * is read by {@code cmd.exe} under rules of its own, so its arguments are left alone.
+     */
+    static String windowsArg(String arg) {
+        if (arg.indexOf('"') < 0) {
+            return arg;
+        }
+        StringBuilder quoted = new StringBuilder("\"");
+        int backslashes = 0;
+        for (char c : arg.toCharArray()) {
+            if (c == '\\') {
+                backslashes++;
+                continue;
+            }
+            quoted.append("\\".repeat(c == '"' ? backslashes * 2 + 1 : backslashes)).append(c);
+            backslashes = 0;
+        }
+        return quoted.append("\\".repeat(backslashes * 2)).append('"').toString();
     }
 
     /** Whether a program is on {@code PATH}, read from {@code PATH} itself, never by asking a shell. */
