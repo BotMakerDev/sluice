@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * An umbrella's {@code sluice.yml}, every part optional. Module names in it are what a person types (a path, an
@@ -166,6 +167,26 @@ public record Config(Target target, String branch, String tagPattern, List<Strin
         /** The one this system runs. */
         public Optional<Line> forThisSystem() {
             return Proc.isWindows() ? windows : linux;
+        }
+
+        /** What this system starts to run it, a string through its shell; empty when it has none here. */
+        public Optional<List<String>> argv() {
+            return argv(List.of());
+        }
+
+        /**
+         * The same with {@code arguments} after its own: more of an argument list, {@code $1}… of a string run
+         * through {@code sh}, the end of the line run through {@code cmd}.
+         */
+        public Optional<List<String>> argv(List<String> arguments) {
+            return forThisSystem().map(line -> switch (line) {
+                case Line.Args args -> Stream.concat(args.argv().stream(), arguments.stream()).toList();
+                case Line.Shell shell -> Proc.isWindows()
+                        ? List.of("cmd", "/c", String.join(" ",
+                                Stream.concat(Stream.of(shell.text()), arguments.stream()).toList()))
+                        // The word after the text is $0, so the arguments start at $1.
+                        : Stream.concat(Stream.of("sh", "-c", shell.text(), "sh"), arguments.stream()).toList();
+            });
         }
 
         /** An argument list run without a shell, or a string run through {@code sh -c} / {@code cmd /c}. */

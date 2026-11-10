@@ -15,4 +15,9 @@ All notable changes to this project are documented here, in the format of
 - Deciding: each module's newest tag, what changed since it (a back-to-snapshot commit and moved pins are no
   change; only ignored files is its own answer; an upstream released since is a change), requests by name, level
   or version, and the dependents a release owes, listed or added with `withDependents`.
+- Gates, all run before the first tag, each answering ok, skipped, forced or refused: `clean` (on the release
+  branch, committed, not behind its remote), `owed`, `pins-at-main`, `text-pins`, `changelog` (the built-in reader
+  or a configured extractor), `ci` (each workflow's newest finished run on GitHub), `pins-resolve`,
+  `builds-at-pins` (the pom declares each pinned upstream's repository, and the module compiles at its release
+  pins in an empty local repository), and a project's own commands with the release's facts in `RT_` variables.
 - `sluice.yml`, read strictly: an unknown key or a bad value is refused, naming where it is.

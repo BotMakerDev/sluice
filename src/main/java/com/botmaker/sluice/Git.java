@@ -8,7 +8,8 @@ import java.util.Optional;
 /**
  * Read-only git: what a decision or a gate asks. Nothing here changes a working tree, a branch or a remote;
  * whatever does goes through {@link Runner#git}, so a preview shows it and runs none of it. The one thing a
- * preview does to a repository is fetch its remote's tags, without which it would decide from stale ones.
+ * preview does to a repository is fetch its remote's tags and release branch, without which it would decide from
+ * stale ones.
  */
 public final class Git {
 

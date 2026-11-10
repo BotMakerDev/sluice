@@ -51,6 +51,30 @@ public final class PomReader {
         return read(file, parse(file, text));
     }
 
+    /**
+     * The urls of the repositories {@code pom} declares itself, outside any profile, without a trailing slash.
+     * An unreadable pom declares none.
+     */
+    public static List<String> repositories(Path pom) {
+        Path file = pom.toAbsolutePath().normalize();
+        try {
+            Element project = parse(file, new InputSource(file.toUri().toString()));
+            return child(project, "repositories").map(PomReader::children).orElse(List.of()).stream()
+                    .map(repository -> text(repository, "url"))
+                    .flatMap(Optional::stream)
+                    .map(PomReader::withoutSlash)
+                    .toList();
+        } catch (Refusal unreadable) {
+            return List.of();
+        }
+    }
+
+    /** A repository's url as two spellings of it compare equal. */
+    public static String withoutSlash(String url) {
+        String stripped = url.strip();
+        return stripped.endsWith("/") ? stripped.substring(0, stripped.length() - 1) : stripped;
+    }
+
     /** The root element of {@code text}, a byte-order mark before it left out. */
     static Element parse(Path file, String text) {
         return parse(file, new InputSource(new StringReader(text.startsWith("﻿") ? text.substring(1) : text)));
