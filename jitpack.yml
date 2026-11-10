@@ -1,0 +1,6 @@
+jdk:
+  - openjdk25
+install:
+  # .jitpack/build.sh brings its own Maven 3.9.9 (and Temurin 25 where SDKMan's download fails), fetched from
+  # Google's mirror of Maven Central first, and retries a 429 rather than losing the tag.
+  - bash .jitpack/build.sh

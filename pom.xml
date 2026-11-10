@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- JitPack serves this repository under com.github.BotMakerDev, so the build's coordinate is the published one. -->
+    <groupId>com.github.BotMakerDev</groupId>
+    <artifactId>sluice</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+
+    <name>sluice</name>
+    <description>
+        Releases a Maven project split over the git submodules of one umbrella repository: each module tagged in
+        dependency order, its dependents' pins moved to it, and every module back on its next snapshot.
+    </description>
+    <url>https://github.com/BotMakerDev/sluice</url>
+
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+        </license>
+    </licenses>
+
+    <properties>
+        <maven.compiler.release>25</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Pinned for JitPack: its Maven defaults the compiler to 3.1, which ignores maven.compiler.release.
+                 3.11.0, not newer: 3.12.0 needs Maven 3.6.3. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>
