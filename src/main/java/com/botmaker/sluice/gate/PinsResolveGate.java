@@ -4,7 +4,6 @@ import com.botmaker.sluice.Version;
 import com.botmaker.sluice.decide.Decision;
 import com.botmaker.sluice.model.Edge;
 import com.botmaker.sluice.model.Module;
-import com.botmaker.sluice.model.Pin;
 import com.botmaker.sluice.spi.Gate;
 import com.botmaker.sluice.spi.GateContext;
 import com.botmaker.sluice.spi.PublishTarget;
@@ -40,7 +39,7 @@ public final class PinsResolveGate implements Gate {
         for (Module module : releasing.keySet()) {
             for (Edge edge : ctx.graph().upstreams(module)) {
                 Module upstream = edge.upstream();
-                if (releasing.containsKey(upstream) || !pinnedInAPom(edge) || upstream.coordinate().isEmpty()) {
+                if (releasing.containsKey(upstream) || !edge.pinnedInAPom() || upstream.coordinate().isEmpty()) {
                     continue;
                 }
                 Version newest = ctx.plan().decision(upstream).map(Decision::base).orElse(Version.ZERO);
@@ -70,10 +69,5 @@ public final class PinsResolveGate implements Gate {
             verdicts.add(ok("every pin outside this release resolves (" + served + ")"));
         }
         return verdicts;
-    }
-
-    /** Whether a pom of the downstream spells the upstream's version: what a build resolves. */
-    static boolean pinnedInAPom(Edge edge) {
-        return edge.pins().stream().anyMatch(pin -> !(pin instanceof Pin.Text));
     }
 }

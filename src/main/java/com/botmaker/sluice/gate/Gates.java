@@ -33,7 +33,8 @@ public final class Gates {
     public static List<Gate> standard(Config config, Function<Module, PublishTarget> targets,
                                       Optional<GitHub> github) {
         List<Gate> gates = new ArrayList<>(List.of(new CleanGate(), new OwedGate(), new PinsAtMainGate(),
-                new TextPinGate(), new ChangelogGate(), new CiGate(github), new PinsResolveGate(targets)));
+                new TextPinGate(), new ChangelogGate(), new CiGate(github), new PinsResolveGate(targets),
+                new TargetGate(targets)));
         config.gates().forEach(command -> gates.add(new CommandGate(command)));
         gates.add(new BuildsAtPinsGate(targets));
         return List.copyOf(gates);

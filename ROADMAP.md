@@ -7,6 +7,14 @@ Open work only. The plan for v0.1.0 is `docs/superpowers/plans/2026-11-10-sluice
 - `builds-at-pins` skips a module that pins an upstream released by the same run, or pins one by a literal or a
   `<parent>`: build those too, moving the pins in the throwaway tree with the release's own mover.
 - `builds-at-pins` downloads every plugin and dependency into its empty local repository on each run.
-- The `lock` and `target` gates; publish targets, the release itself with state, lock and resume.
+- The `lock` gate; the release itself with state, lock and resume.
+- A JitPack coordinate of a multi-module repository (`com.github.owner.repo:module`): the wait asks for the root
+  artifact's address only.
+- The JitPack plugin check reads the module's own pom only: a plugin a `<parent>` or its `pluginManagement` pins
+  is not checked, and a requirement a plugin states only in its `plugin.xml` (`requiredMavenVersion`) is not read.
+- The Maven a JitPack build runs is one value for the umbrella (or a module's own `target`); reading it from each
+  module's `jitpack.yml` would keep it from drifting.
+- A Maven repository that needs credentials to answer: the target reads it as not answering, so the wait times
+  out.
 - The command line; rpm, deb and Windows packages.
 - v2: the extension SPI published as a stable API; layouts beyond an umbrella of submodules.

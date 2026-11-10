@@ -14,6 +14,11 @@ public record Edge(Module upstream, Module downstream, List<Pin> pins, String wh
         pins = List.copyOf(pins);
     }
 
+    /** Whether a pom of the downstream spells the upstream's version: what a build resolves. */
+    public boolean pinnedInAPom() {
+        return pins.stream().anyMatch(pin -> !(pin instanceof Pin.Text));
+    }
+
     @Override
     public String toString() {
         return upstream + " -> " + downstream + " (" + why + ")";

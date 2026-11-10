@@ -81,4 +81,17 @@ class ConfigLoaderTest {
         assertEquals(StepPoint.AFTER_TAG, config.steps().getFirst().at());
         assertEquals(Optional.of(new Line.Shell("echo hi")), config.steps().getFirst().run().linux());
     }
+
+    @Test
+    void jitpackNamesTheMavenItsBuildsRun() {
+        assertEquals(new Target.Jitpack(Optional.of("3.9.9")),
+                ConfigLoader.parse("target: {jitpack: {maven: '3.9.9'}}\n", "t").target());
+        Refusal both = assertThrows(Refusal.class,
+                () -> ConfigLoader.parse("target: {jitpack: {}, maven: x}\n", "t"));
+        assertTrue(both.getMessage().contains("target must be"), both.getMessage());
+        Refusal notAVersion = assertThrows(Refusal.class,
+                () -> ConfigLoader.parse("target: {jitpack: {maven: latest}}\n", "t"));
+        assertTrue(notAVersion.getMessage().contains("target.jitpack.maven must be a Maven version"),
+                notAVersion.getMessage());
+    }
 }

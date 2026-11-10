@@ -73,7 +73,7 @@ public final class BuildsAtPinsGate implements Gate {
         try {
             for (Module module : releasing.keySet()) {
                 List<Edge> pinned = ctx.graph().upstreams(module).stream()
-                        .filter(PinsResolveGate::pinnedInAPom).toList();
+                        .filter(Edge::pinnedInAPom).toList();
                 if (module.pom().isEmpty() || pinned.isEmpty()) {
                     continue;
                 }

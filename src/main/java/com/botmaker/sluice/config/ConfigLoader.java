@@ -104,13 +104,26 @@ public final class ConfigLoader {
     }
 
     private static Target target(Node node) {
+        String shapes = "must be jitpack, none, { maven: <url> } or { jitpack: { maven: <version> } }";
         if (node.value() instanceof Map<?, ?>) {
-            return new Target.Maven(node.map(Set.of("maven")).get("maven").string());
+            Map<String, Node> keys = node.map(Set.of("maven", "jitpack"));
+            if (keys.size() != 1) {
+                throw node.wrong(shapes);
+            }
+            return keys.containsKey("maven")
+                    ? new Target.Maven(keys.get("maven").string())
+                    : new Target.Jitpack(optional(keys.get("jitpack").map(Set.of("maven")), "maven")
+                            .map(maven -> {
+                                if (!maven.string().matches("\\d+(\\.\\d+)*")) {
+                                    throw maven.wrong("must be a Maven version, digits and dots: 3.9.9");
+                                }
+                                return maven.string();
+                            }));
         }
         return switch (node.string()) {
             case "jitpack" -> new Target.Jitpack();
             case "none" -> new Target.None();
-            default -> throw node.wrong("must be jitpack, none or { maven: <url> }");
+            default -> throw node.wrong(shapes);
         };
     }
 

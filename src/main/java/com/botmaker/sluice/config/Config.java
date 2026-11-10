@@ -58,8 +58,18 @@ public record Config(Target target, String branch, String tagPattern, List<Strin
     /** Where a module publishes. */
     public sealed interface Target {
 
-        /** JitPack: the pin is the tag's name. */
-        record Jitpack() implements Target {
+        /**
+         * JitPack: the pin is the tag's name.
+         *
+         * @param maven the Maven a module's {@code jitpack.yml} installs and builds with; empty when the build
+         *              runs JitPack's own
+         */
+        record Jitpack(Optional<String> maven) implements Target {
+
+            /** JitPack building with its own Maven. */
+            public Jitpack() {
+                this(Optional.empty());
+            }
         }
 
         /** A Maven repository at {@code url}: the pin is the bare version. */

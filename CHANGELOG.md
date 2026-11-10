@@ -20,4 +20,10 @@ All notable changes to this project are documented here, in the format of
   or a configured extractor), `ci` (each workflow's newest finished run on GitHub), `pins-resolve`,
   `builds-at-pins` (the pom declares each pinned upstream's repository, and the module compiles at its release
   pins in an empty local repository), and a project's own commands with the release's facts in `RT_` variables.
+- Publish targets: `jitpack` (the pin is the tag's name; `{jitpack: {maven: <version>}}` names the Maven its
+  builds install), `{maven: <url>}` (the bare version; Central needs no declared repository, a `file:` address is
+  a directory), and `none`. The wait for a tag's publish, owed only to a module a later one in the run resolves
+  from a pom; JitPack's wait stops at a build it reports failed and says when Maven Central's rate limit failed
+  it. The `target` gate: on JitPack, every script `jitpack.yml` runs is committed, and every pinned Maven plugin
+  runs on the build's Maven, read from the plugin's own pom.
 - `sluice.yml`, read strictly: an unknown key or a bad value is refused, naming where it is.
