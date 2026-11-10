@@ -6,6 +6,7 @@ import com.botmaker.sluice.model.PomFile.Reference;
 import com.botmaker.sluice.model.PomFile.Where;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
+import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 import javax.xml.XMLConstants;
@@ -13,6 +14,7 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.IOException;
+import java.io.StringReader;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -32,7 +34,7 @@ public final class PomReader {
     static final String DEFAULT_PLUGIN_GROUP = "org.apache.maven.plugins";
 
     /** The spellings of a pom's own groupId. */
-    private static final Set<String> OWN_GROUP = Set.of("${project.groupId}", "${pom.groupId}");
+    static final Set<String> OWN_GROUP = Set.of("${project.groupId}", "${pom.groupId}");
 
     private PomReader() {
     }
@@ -40,7 +42,21 @@ public final class PomReader {
     /** The pom at {@code pom}, refused when it is not a readable pom. */
     public static PomFile read(Path pom) {
         Path file = pom.toAbsolutePath().normalize();
-        Element project = parse(file);
+        return read(file, parse(file, new InputSource(file.toUri().toString())));
+    }
+
+    /** {@code text} read as the pom {@code pom} was at another commit: what a tag holds of it. */
+    public static PomFile read(Path pom, String text) {
+        Path file = pom.toAbsolutePath().normalize();
+        return read(file, parse(file, text));
+    }
+
+    /** The root element of {@code text}, a byte-order mark before it left out. */
+    static Element parse(Path file, String text) {
+        return parse(file, new InputSource(new StringReader(text.startsWith("﻿") ? text.substring(1) : text)));
+    }
+
+    private static PomFile read(Path file, Element project) {
         if (!"project".equals(name(project))) {
             throw new Refusal(file + ": not a pom, its root element is <" + name(project) + ">");
         }
@@ -93,7 +109,8 @@ public final class PomReader {
         }
     }
 
-    private static Element parse(Path file) {
+    /** The root element of {@code source}; {@code file} names it in a refusal. */
+    static Element parse(Path file, InputSource source) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true);
@@ -101,17 +118,22 @@ public final class PomReader {
             factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
             factory.setExpandEntityReferences(false);
             DocumentBuilder builder = factory.newDocumentBuilder();
-            return builder.parse(file.toFile()).getDocumentElement();
+            return builder.parse(source).getDocumentElement();
         } catch (ParserConfigurationException | SAXException | IOException e) {
             throw new Refusal(file + ": not a readable pom (" + e.getMessage() + ")");
         }
     }
 
-    private static String name(Element element) {
+    /** The groupId {@code project} has: its own, else its parent's; empty when it has neither. */
+    static Optional<String> groupId(Element project) {
+        return text(project, "groupId").or(() -> child(project, "parent").flatMap(p -> text(p, "groupId")));
+    }
+
+    static String name(Element element) {
         return element.getLocalName() != null ? element.getLocalName() : element.getNodeName();
     }
 
-    private static List<Element> children(Element parent) {
+    static List<Element> children(Element parent) {
         List<Element> elements = new ArrayList<>();
         for (Node node = parent.getFirstChild(); node != null; node = node.getNextSibling()) {
             if (node instanceof Element element) {
@@ -121,11 +143,11 @@ public final class PomReader {
         return elements;
     }
 
-    private static Optional<Element> child(Element parent, String name) {
+    static Optional<Element> child(Element parent, String name) {
         return children(parent).stream().filter(e -> name.equals(name(e))).findFirst();
     }
 
-    private static Optional<String> text(Element parent, String name) {
+    static Optional<String> text(Element parent, String name) {
         return child(parent, name).map(e -> e.getTextContent().strip()).filter(s -> !s.isEmpty());
     }
 }
