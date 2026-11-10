@@ -53,15 +53,28 @@ jobs:
           jlink --add-modules "$modules,jdk.charsets" --strip-debug --no-header-files --no-man-pages \
             --output target/runtime
           target/runtime/bin/java -jar target/sluice-all.jar --version
+      # The rpm is signed, for dnf's gpgcheck (packaging/nfpm.yaml); GPG_PRIVATE_KEY is base64 of the armored
+      # private key, what nfpm's key_file reads once decoded. Without the secret the rpm is built unsigned.
       - name: Build the rpm and the deb
         shell: bash
         env:
           NFPM_VERSION: '2.43.0'
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          NFPM_RPM_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           curl -fsSL -o "$RUNNER_TEMP/nfpm.tar.gz" \
             "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
           tar -xzf "$RUNNER_TEMP/nfpm.tar.gz" -C "$RUNNER_TEMP" nfpm
           export SLUICE_VERSION="${GITHUB_REF_NAME#v}"
+          export NFPM_RPM_KEY_FILE=""
+          if [ -n "$GPG_PRIVATE_KEY" ]; then
+            NFPM_RPM_KEY_FILE="$RUNNER_TEMP/signing.asc"
+            # Removed on every exit, a failed nfpm's too.
+            trap 'rm -f "$RUNNER_TEMP/signing.asc"' EXIT
+            (umask 077; echo "$GPG_PRIVATE_KEY" | base64 -d > "$NFPM_RPM_KEY_FILE")
+          else
+            echo "::warning::GPG_PRIVATE_KEY is unset: the rpm is unsigned, and dnf refuses it under gpgcheck=1."
+          fi
           "$RUNNER_TEMP/nfpm" package -f packaging/nfpm.yaml -p rpm -t target/sluice.rpm
           "$RUNNER_TEMP/nfpm" package -f packaging/nfpm.yaml -p deb -t target/sluice.deb
       - uses: actions/upload-artifact@v4
@@ -134,3 +147,58 @@ jobs:
           gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes ""
           gh release upload "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --clobber dist/*
+
+  # On a tag, after the release has its packages: the signed dnf and apt repositories and install.sh on this
+  # repository's Pages (.github/scripts/build-repo.sh), as botmaker-cli's and botmaker-studio's. Pages' source is
+  # "GitHub Actions" (Settings ▸ Pages), and the github-pages environment allows tags `v*` besides `main`
+  # (Settings ▸ Environments); without either, deploy-pages fails.
+  pages:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: attach
+    runs-on: ubuntu-latest
+    # Job-level permissions replace the workflow's; deploy-pages needs id-token for its OIDC handshake.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # One Pages deployment at a time: queued, never cancelled, so a tag's site is never lost to a newer one's.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    env:
+      GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: artifacts
+      # createrepo_c writes the dnf metadata; apt-ftparchive (apt-utils) the apt indexes.
+      - name: Install the repository tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y createrepo-c apt-utils
+      - name: Import the signing key
+        if: env.GPG_KEY_ID != ''
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          gpgconf --reload gpg-agent || true
+          echo "$GPG_PRIVATE_KEY" | base64 -d | gpg --batch --import
+          echo "SLUICE_SIGN=1" >> "$GITHUB_ENV"
+      - name: Build the repositories
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: bash .github/scripts/build-repo.sh artifacts site "$GITHUB_REF_NAME"
+      # The versions botmaker-cli's pages job deploys with.
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v5

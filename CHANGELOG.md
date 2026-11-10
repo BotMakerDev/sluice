@@ -16,6 +16,11 @@ All notable changes to this project are documented here, in the format of
   with no change of its own (only for its upstreams) needs no notes then: those lines are its notes.
 - A red `ci` names each upstream whose CI went green after the failed run: a dependent's CI builds its
   upstreams' branches, and a rerun may pass.
+- One-command install on Fedora/RHEL and Debian/Ubuntu (x86_64):
+  `curl -fsSL https://botmakerdev.github.io/sluice/install.sh | sudo bash`. Each tag publishes signed dnf and apt
+  repositories on this repository's GitHub Pages, so later versions arrive with the system's updates; the rpm is
+  signed too. On Debian and Ubuntu, whose own `sluice` is an unrelated pipe rate limiter, an apt pin makes this
+  one win.
 
 ### Changed
 

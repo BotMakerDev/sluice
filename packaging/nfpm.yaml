@@ -38,6 +38,13 @@ contents:
   - src: LICENSE
     dst: /usr/share/doc/sluice/LICENSE
 
+# The rpm's own header signature, which dnf checks under the published sluice.repo's gpgcheck=1 apart from the
+# signed index (repo_gpgcheck). CI writes the org's key to NFPM_RPM_KEY_FILE, NFPM_RPM_PASSPHRASE its passphrase;
+# left empty (a fork, a dry run) nfpm signs nothing. The deb stays unsigned: apt checks the signed InRelease.
+rpm:
+  signature:
+    key_file: ${NFPM_RPM_KEY_FILE}
+
 # Hard dependencies: a release runs both, and without them nothing works.
 overrides:
   rpm:

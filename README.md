@@ -21,7 +21,21 @@ A preview is the default. Nothing is tagged, pushed or written without `--execut
 Configuration is an optional `sluice.yml` at the umbrella's root. Without one, sluice reads the graph from the
 poms, tags `v{version}` on `main`, and publishes nowhere.
 
-Status: in development; v0.1.0 is not released yet.
+## Install
+
+Fedora/RHEL or Debian/Ubuntu, x86_64:
+
+```text
+curl -fsSL https://botmakerdev.github.io/sluice/install.sh | sudo bash
+```
+
+It registers the signed dnf or apt repository at <https://botmakerdev.github.io/sluice/> (whose page gives the
+same steps by hand) and installs from it; later versions come with the system's updates. The package carries its
+own Java runtime and needs git and Maven. Debian and Ubuntu ship an unrelated `sluice`; the installer pins this
+repository so its package wins, and replaces that one if it is installed.
+
+Windows: the MSI, or `sluice-windows.zip` with its scoop manifest. Anywhere with Java 25: `java -jar
+sluice-all.jar`. All are on the [Releases](https://github.com/BotMakerDev/sluice/releases) page.
 
 ## Licence
 
