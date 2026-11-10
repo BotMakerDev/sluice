@@ -80,8 +80,8 @@ class CommandGateTest {
         run("", 0);
 
         List<String> facts = Files.readAllLines(record);
-        assertTrue(facts.containsAll(List.of("RT_MODULE=a", "RT_VERSION=0.0.1", "RT_NEXT_SNAPSHOT=0.0.2-SNAPSHOT",
-                "RT_TAG=v0.0.1", "RT_DRY_RUN=true", "RT_VERSION_A=0.0.1", "RT_VERSION_PLUGIN_B=1.2.0",
+        assertTrue(facts.containsAll(List.of("RT_MODULE=a", "RT_VERSION=0.1.0", "RT_NEXT_SNAPSHOT=0.1.1-SNAPSHOT",
+                "RT_TAG=v0.1.0", "RT_DRY_RUN=true", "RT_VERSION_A=0.1.0", "RT_VERSION_PLUGIN_B=1.2.0",
                 "RT_UMBRELLA=" + umbrella.root().toAbsolutePath().normalize())), facts.toString());
     }
 

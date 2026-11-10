@@ -31,9 +31,9 @@ public record Runner(boolean dryRun, Consumer<String> out, BooleanSupplier stop)
         return stop.getAsBoolean();
     }
 
-    /** Runs {@code git -C <dir> <args…>}, echoed. */
+    /** Runs {@code git -C <dir> <args…>}, echoed; {@code dir} absolute, since git already runs in it. */
     public Proc.Result git(Path dir, String... args) {
-        List<String> argv = new ArrayList<>(List.of("git", "-C", dir.toString()));
+        List<String> argv = new ArrayList<>(List.of("git", "-C", dir.toAbsolutePath().normalize().toString()));
         argv.addAll(List.of(args));
         return run(dir, argv, Map.of());
     }

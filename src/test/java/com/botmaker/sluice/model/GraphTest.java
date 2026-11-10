@@ -43,6 +43,17 @@ class GraphTest {
     }
 
     @Test
+    void ignoredSubmoduleLeftOutThoughItHasAPom() {
+        PlainUmbrella umbrella = new PlainUmbrella(tmp)
+                .module("a", pom("a", "1.0.0-SNAPSHOT", ""))
+                .module("tool", pom("tool", "2.0.0-SNAPSHOT", ""));
+
+        Graph graph = Graph.build(umbrella.layout(), ConfigLoader.parse("modules:\n  tool:\n    kind: ignored\n", "t"));
+
+        assertEquals(List.of("a"), graph.modules().stream().map(Module::name).toList());
+    }
+
+    @Test
     void textPinIsAnEdge() {
         PlainUmbrella umbrella = new PlainUmbrella(tmp)
                 .module("a", pom("a", "1.0.0-SNAPSHOT", ""))

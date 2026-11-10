@@ -109,7 +109,7 @@ final class GitHubRest implements GitHub {
                 for (Object item : list) {
                     if (item instanceof Map<?, ?> run) {
                         runs.add(new Run(text(run, "name"), text(run, "status"), text(run, "conclusion"),
-                                text(run, "html_url"), text(run, "head_sha")));
+                                text(run, "html_url"), text(run, "head_sha"), text(run, "path")));
                     }
                 }
             }

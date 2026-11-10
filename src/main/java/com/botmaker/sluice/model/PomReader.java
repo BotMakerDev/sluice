@@ -116,8 +116,10 @@ public final class PomReader {
     private static void dependencies(Element list, Where where, List<Reference> into) {
         for (Element dependency : children(list)) {
             if ("dependency".equals(name(dependency))) {
+                Where as = where == Where.MANAGED && text(dependency, "scope").filter("import"::equals).isPresent()
+                        ? Where.IMPORTED : where;
                 into.add(new Reference(new Coordinate(text(dependency, "groupId").orElse(""),
-                        text(dependency, "artifactId").orElse("")), text(dependency, "version"), where));
+                        text(dependency, "artifactId").orElse("")), text(dependency, "version"), as));
             }
         }
     }
@@ -130,7 +132,17 @@ public final class PomReader {
             into.add(new Reference(new Coordinate(text(plugin, "groupId").orElse(DEFAULT_PLUGIN_GROUP),
                     text(plugin, "artifactId").orElse("")), text(plugin, "version"), Where.PLUGIN));
             child(plugin, "dependencies").ifPresent(d -> dependencies(d, Where.PLUGIN_DEPENDENCY, into));
+            child(plugin, "configuration").ifPresent(c -> artifactItems(c, into));
+            child(plugin, "executions").ifPresent(executions -> children(executions).forEach(execution ->
+                    child(execution, "configuration").ifPresent(c -> artifactItems(c, into))));
         }
+    }
+
+    private static void artifactItems(Element configuration, List<Reference> into) {
+        child(configuration, "artifactItems").ifPresent(items -> children(items).stream()
+                .filter(item -> "artifactItem".equals(name(item)))
+                .forEach(item -> into.add(new Reference(new Coordinate(text(item, "groupId").orElse(""),
+                        text(item, "artifactId").orElse("")), text(item, "version"), Where.ARTIFACT_ITEM))));
     }
 
     /** The root element of {@code source}; {@code file} names it in a refusal. */

@@ -35,7 +35,7 @@ final class GraphCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        Path root = umbrella != null ? umbrella : parent.umbrella();
+        Path root = umbrella != null ? umbrella.toAbsolutePath().normalize() : parent.umbrella();
         Config config = ConfigLoader.load(root);
         Graph graph = Graph.build(UmbrellaLayout.of(root), config);
         PrintWriter out = spec.commandLine().getOut();

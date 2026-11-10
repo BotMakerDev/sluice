@@ -3,6 +3,7 @@ package com.botmaker.sluice.model;
 import com.botmaker.sluice.Refusal;
 import com.botmaker.sluice.model.PomFile.Parent;
 import com.botmaker.sluice.model.PomFile.Reference;
+import com.botmaker.sluice.model.PomFile.Where;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -66,6 +67,10 @@ final class Pins {
             } else if (version.contains("${")) {
                 throw new Refusal(pom.file() + ": " + where + " on " + up + " has the version " + version
                         + "; sluice moves a literal version or exactly one ${property}");
+            } else if (reference.where() == Where.ARTIFACT_ITEM) {
+                // use-dep-version moves a dependency's version, never one in a plugin's configuration.
+                throw new Refusal(pom.file() + ": " + where + " on " + up + " has the literal version " + version
+                        + "; sluice moves an artifact item's version only through one ${property}");
             } else {
                 into.add(new Edge(up, down, List.of(new Pin.Literal(pom.file(), reference.coordinate())), where));
             }

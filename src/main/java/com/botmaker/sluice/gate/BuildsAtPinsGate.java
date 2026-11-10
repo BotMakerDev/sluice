@@ -7,6 +7,7 @@ import com.botmaker.sluice.Refusal;
 import com.botmaker.sluice.Runner;
 import com.botmaker.sluice.Version;
 import com.botmaker.sluice.decide.Decision;
+import com.botmaker.sluice.model.Coordinate;
 import com.botmaker.sluice.model.Edge;
 import com.botmaker.sluice.model.Module;
 import com.botmaker.sluice.model.Pin;
@@ -128,7 +129,7 @@ public final class BuildsAtPinsGate implements Gate {
         for (Edge edge : pinned) {
             PublishTarget target = targets.apply(edge.upstream());
             Optional<String> url = target.repository().map(PomReader::withoutSlash);
-            if (url.isPresent() && !declared.contains(url.get())) {
+            if (url.isPresent() && !declared.contains(url.get()) && resolvedByItsBuild(module, edge.upstream())) {
                 verdicts.add(refused(module + " pins " + edge.upstream() + ", which resolves from " + url.get()
                                 + ", and its pom declares no such repository",
                         "     Its tag is built from the repositories " + ctx.said(module.pom().get().file())
@@ -138,6 +139,20 @@ public final class BuildsAtPinsGate implements Gate {
             }
         }
         return verdicts;
+    }
+
+    /**
+     * Whether building {@code module} fetches {@code upstream}: as its parent, or named anywhere but its
+     * {@code <dependencyManagement>}. A version managed there only is a version for the poms that inherit it, which
+     * resolve it from their own repositories; a bom imported there is fetched by this build.
+     */
+    private static boolean resolvedByItsBuild(Module module, Module upstream) {
+        PomFile pom = module.pom().orElseThrow();
+        Optional<Coordinate> coordinate = upstream.coordinate();
+        return coordinate.isEmpty()
+                || pom.parent().filter(p -> p.coordinate().equals(coordinate.get())).isPresent()
+                || pom.references().stream().anyMatch(r -> r.coordinate().equals(coordinate.get())
+                        && r.where() != PomFile.Where.MANAGED);
     }
 
     /**

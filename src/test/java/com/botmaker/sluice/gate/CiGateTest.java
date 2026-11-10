@@ -93,6 +93,19 @@ class CiGateTest {
     }
 
     @Test
+    void aRemovedWorkflowsFailureIsIgnored() {
+        Run gone = new Run("build", "completed", "failure", "https://example.invalid/7", "ffffffffff",
+                ".github/workflows/build.yml");
+        Run pages = new Run("pages", "completed", "failure", "https://example.invalid/8", "ffffffffff",
+                "dynamic/pages/pages-build-deployment");
+
+        assertEquals(Status.OK, verdict(Optional.of(List.of(passedAtHead(), gone))).status(),
+                "a workflow no longer in the module says nothing of its branch now");
+        assertEquals(Status.REFUSED, verdict(Optional.of(List.of(passedAtHead(), pages))).status(),
+                "GitHub's own workflows have no file, and still count");
+    }
+
+    @Test
     void nothingFinishedOrNoAnswerSkipped() {
         assertEquals(Status.SKIPPED, verdict(Optional.of(List.of(RUNNING))).status());
         assertEquals(Status.SKIPPED, verdict(Optional.of(List.of())).status());

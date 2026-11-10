@@ -139,12 +139,9 @@ public final class ConfigLoader {
             return ModuleConfig.NONE;
         }
         Map<String, Node> keys = node.map(Set.of("alias", "kind", "place", "target"));
-        boolean tagOnly = optional(keys, "kind").map(k -> switch (k.string()) {
-            case "maven" -> false;
-            case "tag-only" -> true;
-            default -> throw k.wrong("must be maven or tag-only");
-        }).orElse(false);
-        return new ModuleConfig(optional(keys, "alias").map(Node::string), tagOnly,
+        ModuleConfig.Kind kind = optional(keys, "kind").map(k -> ModuleConfig.Kind.fromId(k.string())
+                .orElseThrow(() -> k.wrong("must be maven, tag-only or ignored"))).orElse(ModuleConfig.Kind.MAVEN);
+        return new ModuleConfig(optional(keys, "alias").map(Node::string), kind,
                 optional(keys, "place").map(ConfigLoader::place), optional(keys, "target").map(ConfigLoader::target));
     }
 

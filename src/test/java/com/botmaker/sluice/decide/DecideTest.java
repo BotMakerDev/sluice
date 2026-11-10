@@ -101,8 +101,23 @@ class DecideTest {
     }
 
     @Test
-    void untaggedModuleRequestedByLevelBumpsFromZero() {
+    void untaggedModuleRequestedByLevelReleasesItsBranchVersion() {
         umbrella.module("core", pom("core", "0.1.0-SNAPSHOT", ""));
+
+        assertEquals(Map.of("core", "0.1.0"), releasing(decide(Optional.empty(), false, "core=patch")),
+                "never tagged: the version its branch has been building, not a bump from 0.0.0");
+    }
+
+    @Test
+    void untaggedModuleAskedForAHigherLevelGetsIt() {
+        umbrella.module("core", pom("core", "0.1.0-SNAPSHOT", ""));
+
+        assertEquals(Map.of("core", "1.0.0"), releasing(decide(Optional.empty(), false, "core=major")));
+    }
+
+    @Test
+    void untaggedModuleWithNoVersionBumpsFromZero() {
+        umbrella.module("core", pom("core", "next", ""));
 
         assertEquals(Map.of("core", "0.1.0"), releasing(decide(Optional.empty(), false, "core=minor")));
     }

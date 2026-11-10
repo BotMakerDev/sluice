@@ -99,13 +99,40 @@ public record Config(Target target, String branch, String tagPattern, List<Strin
     /**
      * One submodule's settings.
      *
-     * @param tagOnly a submodule tagged with the rest but never pinned or published: one with no pom
+     * @param kind how sluice releases it, or that it does not
      */
-    public record ModuleConfig(Optional<String> alias, boolean tagOnly, Optional<Place> place,
-                               Optional<Target> target) {
+    public record ModuleConfig(Optional<String> alias, Kind kind, Optional<Place> place, Optional<Target> target) {
 
-        public static final ModuleConfig NONE = new ModuleConfig(Optional.empty(), false, Optional.empty(),
+        public static final ModuleConfig NONE = new ModuleConfig(Optional.empty(), Kind.MAVEN, Optional.empty(),
                 Optional.empty());
+
+        /** A submodule tagged with the rest but never pinned or published: one with no pom. */
+        public boolean tagOnly() {
+            return kind == Kind.TAG_ONLY;
+        }
+
+        /** How a submodule takes part in a release. */
+        public enum Kind {
+            /** Released by its pom: the default for a submodule that has one. */
+            MAVEN("maven"),
+            TAG_ONLY("tag-only"),
+            /** Not released, pinned or read at all, though it has a pom: another project kept in the umbrella. */
+            IGNORED("ignored");
+
+            private final String id;
+
+            Kind(String id) {
+                this.id = id;
+            }
+
+            public String id() {
+                return id;
+            }
+
+            public static Optional<Kind> fromId(String id) {
+                return Arrays.stream(values()).filter(k -> k.id.equals(id)).findFirst();
+            }
+        }
     }
 
     /**

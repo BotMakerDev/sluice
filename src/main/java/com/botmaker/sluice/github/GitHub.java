@@ -2,6 +2,7 @@ package com.botmaker.sluice.github;
 
 import com.botmaker.sluice.Proc;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -10,6 +11,9 @@ import java.util.regex.Pattern;
 
 /** What a release asks GitHub. The token is read from the environment and never written anywhere. */
 public interface GitHub {
+
+    /** Where a repository keeps its own workflows. */
+    String WORKFLOWS = ".github/workflows/";
 
     /** A repository on GitHub. */
     record Repo(String owner, String name) {
@@ -34,8 +38,23 @@ public interface GitHub {
      * @param workflow   the workflow's name
      * @param status     {@code completed}, or what it is doing
      * @param conclusion {@code success}, {@code failure}…; empty until it is finished
+     * @param path       its workflow's file in the repository ({@code .github/workflows/ci.yml}); empty when unknown
      */
-    record Run(String workflow, String status, String conclusion, String url, String sha) {
+    record Run(String workflow, String status, String conclusion, String url, String sha, String path) {
+
+        /** A run whose workflow file is not known. */
+        public Run(String workflow, String status, String conclusion, String url, String sha) {
+            this(workflow, status, conclusion, url, sha, "");
+        }
+
+        /**
+         * Whether its workflow is gone from {@code checkout}: a file under {@code .github/workflows/} that is no
+         * longer there, whose old runs say nothing of the branch now. GitHub's own workflows ({@code dynamic/…})
+         * are never gone.
+         */
+        public boolean removedFrom(Path checkout) {
+            return path.startsWith(WORKFLOWS) && !Files.isRegularFile(checkout.resolve(path));
+        }
 
         public boolean finished() {
             return "completed".equals(status);

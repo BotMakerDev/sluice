@@ -71,7 +71,7 @@ public final class CiGate implements Gate {
         Map<String, Run> newestFinished = new LinkedHashMap<>();
         boolean running = false;
         for (Run run : runs) {
-            if (run.finished() && run.cancelled()) {
+            if (run.finished() && run.cancelled() || run.removedFrom(module.dir().dir())) {
                 continue;
             }
             if (run.finished()) {

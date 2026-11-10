@@ -51,7 +51,7 @@ class ChangelogGateTest {
         GateVerdict verdict = only(check(new ChangelogGate(), umbrella, ON, "a"));
 
         assertEquals(Status.REFUSED, verdict.status());
-        assertTrue(verdict.line().contains("no notes for 0.0.1"), verdict.line());
+        assertTrue(verdict.line().contains("no notes for 0.1.0"), verdict.line());
         assertTrue(verdict.refusal().contains("## [Unreleased]"), verdict.refusal());
     }
 
@@ -72,7 +72,7 @@ class ChangelogGateTest {
     @Test
     void shellExtractorGetsTheVersionAsItsFirstArgument() {
         assumeFalse(Proc.isWindows(), "sh");
-        Config config = ConfigLoader.parse("changelog:\n  extractor: 'test \"$1\" = 0.0.1 && echo notes'\n", "t");
+        Config config = ConfigLoader.parse("changelog:\n  extractor: 'test \"$1\" = 0.1.0 && echo notes'\n", "t");
 
         GateVerdict verdict = only(check(new ChangelogGate(), umbrella, config, "a"));
 
@@ -94,7 +94,7 @@ class ChangelogGateTest {
         GateVerdict verdict = only(check(new ChangelogGate(), umbrella, config, "a"));
 
         assertEquals(Status.OK, verdict.status(), verdict.refusal());
-        assertTrue(Files.readAllLines(record).contains("arg=0.0.1"), Files.readString(record));
+        assertTrue(Files.readAllLines(record).contains("arg=0.1.0"), Files.readString(record));
     }
 
     @Test

@@ -54,6 +54,38 @@ class PinsTest {
         assertEquals(List.of(new Pin.Literal(pomOf("b"), new Coordinate("g", "a"))), onlyEdge(umbrella).pins());
     }
 
+    private static String copied(String artifactId, String version) {
+        return "  <build><plugins><plugin><artifactId>maven-dependency-plugin</artifactId><executions><execution>"
+                + "<configuration><artifactItems><artifactItem><groupId>g</groupId><artifactId>" + artifactId
+                + "</artifactId><version>" + version + "</version><type>zip</type></artifactItem></artifactItems>"
+                + "</configuration></execution></executions></plugin></plugins></build>\n";
+    }
+
+    @Test
+    void artifactItemPropertyPinFound() {
+        PlainUmbrella umbrella = new PlainUmbrella(tmp)
+                .module("a", pom("a", "1.0.0-SNAPSHOT", ""))
+                .module("b", pom("b", "1.0.0-SNAPSHOT",
+                        "  <properties><a.version>1.0.0-SNAPSHOT</a.version></properties>\n"
+                                + copied("a", "${a.version}")));
+
+        Edge edge = onlyEdge(umbrella);
+
+        assertEquals("a", edge.upstream().name());
+        assertEquals(List.of(new Pin.Property(pomOf("b"), "a.version")), edge.pins());
+        assertTrue(edge.why().contains("an artifact a plugin copies"), edge.why());
+    }
+
+    @Test
+    void artifactItemLiteralRefused() {
+        PlainUmbrella umbrella = new PlainUmbrella(tmp)
+                .module("a", pom("a", "1.0.0-SNAPSHOT", ""))
+                .module("b", pom("b", "1.0.0-SNAPSHOT", copied("a", "1.0.0-SNAPSHOT")));
+
+        Refusal refusal = assertThrows(Refusal.class, () -> Graph.build(umbrella.layout(), Config.defaults()));
+        assertTrue(refusal.getMessage().contains("${property}"), refusal.getMessage());
+    }
+
     @Test
     void parentPinFound() {
         PlainUmbrella umbrella = new PlainUmbrella(tmp)

@@ -32,6 +32,8 @@ import java.util.stream.Collectors;
  */
 public final class Decider {
 
+    private static final String SNAPSHOT = "-SNAPSHOT";
+
     private Decider() {
     }
 
@@ -70,12 +72,12 @@ public final class Decider {
                 release = Optional.of(exact);
                 reason = "requested at " + exact;
             } else if (request.isPresent() && (change.kind() == ChangeKind.CHANGED || !owed.isEmpty())) {
-                release = Optional.of(base.bump(request.get().bump()));
+                release = Optional.of(next(module, newest.get(module), request.get().bump()));
                 reason = change.kind() == ChangeKind.CHANGED ? change.why() : owedBy(owed, releasing);
             } else if (request.isPresent()) {
                 reason = change.why() + ": a tag would publish the same artifact";
             } else if (!owed.isEmpty() && withDependents) {
-                release = Optional.of(base.bump(Level.PATCH));
+                release = Optional.of(next(module, newest.get(module), Level.PATCH));
                 reason = "added, " + owedBy(owed, releasing);
             } else if (!owed.isEmpty()) {
                 owedUnrequested.addAll(owed);
@@ -87,6 +89,24 @@ public final class Decider {
             decisions.add(new Decision(module, base, release, change.kind(), reason));
         }
         return new Plan(decisions, owedUnrequested);
+    }
+
+    /**
+     * The version a module releases at {@code level}: its newest tag bumped, or, never tagged, the version its branch
+     * has been building ({@code 0.1.0-SNAPSHOT} releases {@code 0.1.0}) when its pom gives one.
+     */
+    /**
+     * The release a level asks for: that level above the newest tag. A module never tagged releases its branch's
+     * version, or that level above {@code 0.0.0} when it is higher ({@code major} still means {@code 1.0.0}).
+     */
+    private static Version next(Module module, Optional<Version> newest, Level level) {
+        if (newest.isPresent()) {
+            return newest.get().bump(level);
+        }
+        Version fromZero = Version.ZERO.bump(level);
+        return module.version().map(v -> v.endsWith(SNAPSHOT) ? v.substring(0, v.length() - SNAPSHOT.length()) : v)
+                .flatMap(Version::parse).filter(v -> v.compareTo(fromZero) > 0)
+                .orElse(fromZero);
     }
 
     private static String owedBy(List<Edge> owed, Map<Module, Version> releasing) {

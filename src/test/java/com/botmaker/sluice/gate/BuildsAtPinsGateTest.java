@@ -156,6 +156,36 @@ class BuildsAtPinsGateTest {
         assertTrue(verdict.refusal().contains("g:a:jar:1.0.0"), verdict.refusal());
     }
 
+    /** A parent pom that only manages its upstream's version fetches nothing: its children declare the repository. */
+    @Test
+    void managedOnlyPinNeedsNoRepository() throws IOException {
+        BuildsAtPinsGate gate = new BuildsAtPinsGate(module -> target(Optional.of("https://repo.example.invalid/")),
+                offline());
+        FixtureUmbrella umbrella = FixtureUmbrella.create(tmp)
+                .module("a", pom("a", "1.0.1-SNAPSHOT", "")).tag("a", "v1.0.0")
+                .module("b", pom("b", "0.1.0-SNAPSHOT", "  <packaging>pom</packaging>\n"
+                        + "  <properties><a.version>1.0.1-SNAPSHOT</a.version></properties>\n"
+                        + "  <dependencyManagement>" + dep("a", "${a.version}") + "</dependencyManagement>\n"));
+
+        GateVerdict verdict = only(check(gate, umbrella, Config.defaults(), "b"));
+
+        assertEquals(Status.OK, verdict.status(), verdict.line() + "\n" + verdict.refusal());
+    }
+
+    /** A bom imported in {@code <dependencyManagement>} is fetched by the module's own build. */
+    @Test
+    void importedBomNeedsItsRepository() {
+        BuildsAtPinsGate gate = new BuildsAtPinsGate(module -> target(Optional.of("https://repo.example.invalid/")));
+        FixtureUmbrella umbrella = FixtureUmbrella.create(tmp)
+                .module("a", pom("a", "1.0.1-SNAPSHOT", "")).tag("a", "v1.0.0")
+                .module("b", pom("b", "0.1.0-SNAPSHOT", "  <properties><a.version>1.0.1-SNAPSHOT</a.version>"
+                        + "</properties>\n  <dependencyManagement><dependencies><dependency><groupId>g</groupId>"
+                        + "<artifactId>a</artifactId><version>${a.version}</version><type>pom</type>"
+                        + "<scope>import</scope></dependency></dependencies></dependencyManagement>\n"));
+
+        assertEquals(Status.REFUSED, only(check(gate, umbrella, Config.defaults(), "b")).status());
+    }
+
     @Test
     void declaredRepositoryBuilds() throws IOException {
         Path published = publish("a", "1.0.0");

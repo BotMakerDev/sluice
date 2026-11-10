@@ -55,8 +55,12 @@ public record PomFile(Path file, Coordinate coordinate, Optional<String> version
     public enum Where {
         DEPENDENCY("a dependency"),
         MANAGED("a managed dependency"),
+        /** A pom {@code <dependencyManagement>} imports ({@code <scope>import</scope>}): fetched by this build. */
+        IMPORTED("an imported bom"),
         PLUGIN("a plugin"),
-        PLUGIN_DEPENDENCY("a plugin's dependency");
+        PLUGIN_DEPENDENCY("a plugin's dependency"),
+        /** An {@code <artifactItem>} of a plugin's configuration, as {@code maven-dependency-plugin} copies one. */
+        ARTIFACT_ITEM("an artifact a plugin copies");
 
         private final String spelling;
 

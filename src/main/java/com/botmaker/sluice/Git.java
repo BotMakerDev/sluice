@@ -16,9 +16,12 @@ public final class Git {
     private Git() {
     }
 
-    /** Runs {@code git -C <dir> <args…>}. */
+    /**
+     * Runs {@code git -C <dir> <args…>}. The {@code -C} is absolute: git runs in {@code dir} already, so a relative
+     * one would be read from inside it.
+     */
     public static Proc.Result run(Path dir, String... args) {
-        List<String> argv = new ArrayList<>(List.of("git", "-C", dir.toString()));
+        List<String> argv = new ArrayList<>(List.of("git", "-C", dir.toAbsolutePath().normalize().toString()));
         argv.addAll(List.of(args));
         return Proc.run(dir, argv);
     }

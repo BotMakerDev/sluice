@@ -5,6 +5,26 @@ All notable changes to this project are documented here, in the format of
 
 ## [Unreleased]
 
+### Added
+
+- A pin in a plugin's `<artifactItem>` (what `maven-dependency-plugin` copies) is an edge like any other; its
+  version moves only through a `${property}`, so a literal one is refused by name.
+- `kind: ignored` in `sluice.yml` leaves a submodule out of the graph though it has a pom: the release tool's own
+  submodule, say.
+
+### Fixed
+
+- An umbrella named by a relative path (the default, here) is read once: each module's git ran with its directory
+  given twice, and every module came out untagged, detached and unreadable. `Runner.git` names its directory
+  absolutely too, for a library caller that passes a relative one.
+- A module never tagged and asked for by a level releases its branch's version (`0.1.0-SNAPSHOT` releases
+  `0.1.0`), or that level above `0.0.0` when it is higher (`major` still releases `1.0.0`).
+- `ci` ignores the runs of a workflow whose file is no longer in the module: its old red run says nothing of the
+  branch now. GitHub's own workflows, which have no file, still count.
+- `builds-at-pins` asks for a pinned upstream's repository only when the module's build fetches it: a version that
+  only its `<dependencyManagement>` names is fetched by the poms that inherit it, from their own repositories. A
+  bom imported there (`<scope>import</scope>`) is fetched by the module's own build, and still needs it.
+
 ## [0.1.0] - 2026-11-10
 
 ### Added

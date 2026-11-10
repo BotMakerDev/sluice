@@ -75,6 +75,9 @@ public final class Graph {
         for (ModuleDir dir : layout.modules()) {
             ModuleConfig settings = config.module(dir.path());
             Path pom = dir.dir().resolve(POM);
+            if (settings.kind() == ModuleConfig.Kind.IGNORED) {
+                continue;
+            }
             if (settings.tagOnly()) {
                 modules.add(new Module(dir.path(), dir, Module.Kind.TAG_ONLY, settings.alias(), Optional.empty()));
             } else if (Files.isRegularFile(pom)) {

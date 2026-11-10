@@ -141,8 +141,9 @@ public final class Main implements Callable<Integer> {
         return USAGE;
     }
 
+    /** The umbrella as an absolute path, so every module's directory under it is one too. */
     Path umbrella() {
-        return umbrella;
+        return umbrella.toAbsolutePath().normalize();
     }
 
     @Override
@@ -164,19 +165,19 @@ public final class Main implements Callable<Integer> {
         Console console = new Console(out, why);
         Options options = new Options(execute, force, withDependents, !noWait);
         if (status != null) {
-            Saved saved = Release.state(umbrella, stateFile());
+            Saved saved = Release.state(umbrella(), stateFile());
             out.println(saved.file());
             console.state(saved.state());
             return saved.state().status() == ReleaseState.Status.DONE ? OK : STOPPED;
         }
         if (syncPins) {
             // Not stoppable: each module's sync is one commit, quick, and nothing resumes it.
-            return code(engine.syncPins(umbrella, execute, console));
+            return code(engine.syncPins(umbrella(), execute, console));
         }
         return stoppable(out, stop -> {
             Outcome outcome = resume
-                    ? engine.resume(umbrella, options, stop::get, console)
-                    : engine.run(umbrella, Requests.parse(modules, level()), options, stop::get, console);
+                    ? engine.resume(umbrella(), options, stop::get, console)
+                    : engine.run(umbrella(), Requests.parse(modules, level()), options, stop::get, console);
             console.ended(outcome);
             return code(outcome.status());
         });
@@ -195,7 +196,7 @@ public final class Main implements Callable<Integer> {
             return Optional.empty();
         }
         Path typed = Path.of(status);
-        return Optional.of(Files.exists(typed) || typed.isAbsolute() ? typed : umbrella.resolve(typed));
+        return Optional.of(Files.exists(typed) || typed.isAbsolute() ? typed : umbrella().resolve(typed));
     }
 
     private Optional<Level> level() {
