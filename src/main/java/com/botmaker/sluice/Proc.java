@@ -57,7 +57,8 @@ public final class Proc {
         Process process = null;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
-            ProcessBuilder builder = new ProcessBuilder(resolved(argv)).directory(dir.toFile()).redirectErrorStream(true);
+            ProcessBuilder builder = new ProcessBuilder(resolved(argv)).directory(dir.toFile())
+                    .redirectErrorStream(true);
             builder.environment().putAll(env);
             process = builder.start();
             InputStream stdout = process.getInputStream();

@@ -7,7 +7,8 @@ All notable changes to this project are documented here, in the format of
 
 ### Added
 
-- Versions, levels and the process runner; a preview runner that echoes every command and runs none.
+- Versions, levels and the process runner; a preview runner that echoes every command and runs none. On Windows a
+  bare program name runs by its `.exe`, `.cmd` or `.bat`, and an argument keeps the quotes inside it.
 - The umbrella layout: the project's repositories read from `.gitmodules`, in its order.
 - The graph: each pom read as written, the pins that move an upstream's version (a property, wherever up the
   parents it is declared; a literal; a `<parent>`), text pins and extra edges from `sluice.yml`, and the tag
