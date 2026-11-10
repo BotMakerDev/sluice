@@ -133,7 +133,9 @@ public final class Proc {
         if (path == null || command.isBlank() || command.contains(File.separator)) {
             return Optional.empty();
         }
-        List<String> suffixes = isWindows() ? List.of("", ".exe", ".cmd", ".bat") : List.of("");
+        // Windows runs a name with no extension by its extensions only: Maven's bin holds an extensionless sh
+        // script beside mvn.cmd, which CreateProcess refuses as "not a valid Win32 application".
+        List<String> suffixes = isWindows() && !command.contains(".") ? List.of(".exe", ".cmd", ".bat") : List.of("");
         for (String entry : path.split(File.pathSeparator)) {
             if (entry.isBlank()) {
                 continue;
