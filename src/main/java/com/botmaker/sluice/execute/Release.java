@@ -281,8 +281,6 @@ public final class Release {
         private final Map<Module, Version> released;
         private final Map<Module, Optional<Version>> tagged = new HashMap<>();
         private final Set<Module> moved = new LinkedHashSet<>();
-        /** Each module's untracked files before this run first changed it: none of them is committed. */
-        private final Map<Module, Set<String>> untracked = new HashMap<>();
         private final List<Entry> entries = new ArrayList<>();
         private Optional<Path> base = Optional.empty();
 
@@ -386,7 +384,6 @@ public final class Release {
             Map<String, String> facts = Facts.of(umbrella, released, module, config.tagPattern(), runner.dryRun());
             Stage stage = entries.get(at).stage();
             moved.add(module);
-            untracked.computeIfAbsent(module, m -> Git.untracked(m.dir().dir()));
             if (stage == Stage.DECIDED) {
                 stopIfAsked();
                 releaseCommit(module, version, facts);
@@ -429,6 +426,7 @@ public final class Release {
         }
 
         private void releaseCommit(Module module, Version version, Map<String, String> facts) {
+            Set<String> before = Git.untracked(module.dir().dir());
             List<Move> pins = new ArrayList<>();
             Map<Edge, Version> pinnedAt = new LinkedHashMap<>();
             for (Edge edge : graph.upstreams(module)) {
@@ -456,7 +454,7 @@ public final class Release {
                 ChangelogStamp.stamp(runner, module, version, LocalDate.now(wiring.clock()));
             }
             steps.run(StepPoint.BEFORE_RELEASE_COMMIT, module, facts, runner);
-            commit(module, "release: " + module + " " + version);
+            commit(module, "release: " + module + " " + version, before);
         }
 
         /** What a release commit pins {@code upstream} at: this run's version of it, else its newest tag. */
@@ -499,6 +497,7 @@ public final class Release {
         }
 
         private void snapshot(Module module, Version version, Map<String, String> facts) {
+            Set<String> before = Git.untracked(module.dir().dir());
             Optional<Path> pom = pomOf(module);
             if (pom.isPresent()) {
                 List<Move> mains = new ArrayList<>();
@@ -512,7 +511,7 @@ public final class Release {
                 AfterRelease.set(runner, moves, config, module, pom.get(), version);
                 moveAll(moves, mains);
             }
-            commit(module, "back to snapshot: " + module + " " + version.nextSnapshot());
+            commit(module, "back to snapshot: " + module + " " + version.nextSnapshot(), before);
             steps.run(StepPoint.AFTER_SNAPSHOT, module, facts, runner);
             must(runner.git(module.dir().dir(), "push", "-q", "origin", config.branch()), module + ": the push");
         }
@@ -579,15 +578,16 @@ public final class Release {
         }
 
         /**
-         * Commits what the release changed: every tracked file, and each file a step created. A file that was
-         * untracked before this run touched the module (an editor's, a build's) is never added.
+         * Commits what the release changed: every tracked file, and each file created while this commit's own work
+         * ran ({@code before} is what was untracked when it started). A file untracked before then (an editor's, a
+         * build's, another step's) is never added, and each one added is named, since the push publishes it.
          */
-        private void commit(Module module, String message) {
+        private void commit(Module module, String message, Set<String> before) {
             Path dir = module.dir().dir();
             must(runner.git(dir, "add", "-u"), module + ": staging");
-            Set<String> before = untracked.getOrDefault(module, Set.of());
             List<String> created = Git.untracked(dir).stream().filter(f -> !before.contains(f)).toList();
             if (!created.isEmpty()) {
+                runner.say("    " + module + ": adds " + String.join(", ", created) + ", created by this commit's steps");
                 List<String> add = new ArrayList<>(List.of("add", "--"));
                 add.addAll(created);
                 must(runner.git(dir, add.toArray(String[]::new)), module + ": staging");

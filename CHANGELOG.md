@@ -20,8 +20,8 @@ All notable changes to this project are documented here, in the format of
 ### Changed
 
 - Untracked files are no concern of a release: `clean` no longer refuses them, and the release and snapshot
-  commits stage the tracked files and what a step created, never a file that was untracked before the run (an
-  editor's, a build's).
+  commits stage the tracked files and what their own steps created, each named in the output, never a file that
+  was untracked when that commit's work began (an editor's, a build's, another step's).
 
 ### Fixed
 
