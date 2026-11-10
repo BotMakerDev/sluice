@@ -70,7 +70,7 @@ final class Changes {
         }
         Optional<String> moved = movedPin(module, tag, ref);
         if (moved.isPresent()) {
-            return new Change(ChangeKind.CHANGED, moved.get());
+            return new Change(ChangeKind.UPSTREAMS, moved.get());
         }
         return new Change(kind, kind == ChangeKind.NONE
                 ? "no changes since " + tag
@@ -164,7 +164,7 @@ final class Changes {
                 // A file the tag lacks holds a pin added since: the tag pinned nothing there.
                 Optional<Version> pinned = Git.show(dir, ref, file)
                         .flatMap(text -> PinReader.value(pin, text))
-                        .flatMap(this::released);
+                        .flatMap(text -> Tags.released(text, config.tagPattern()));
                 if (pinned.filter(p -> !p.equals(released.get())).isPresent()) {
                     moved.add(tag + " pins " + edge.upstream() + " at " + pinned.get() + ", released since at "
                             + released.get());
@@ -173,10 +173,5 @@ final class Changes {
             }
         }
         return moved.isEmpty() ? Optional.empty() : Optional.of(String.join("; ", moved));
-    }
-
-    /** The released version a pin's text names, bare or as its tag. */
-    private Optional<Version> released(String pinned) {
-        return Tags.version(pinned, config.tagPattern()).or(() -> Tags.version(pinned, Version.PLACEHOLDER));
     }
 }

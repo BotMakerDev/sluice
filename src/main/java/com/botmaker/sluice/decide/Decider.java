@@ -71,9 +71,9 @@ public final class Decider {
                 }
                 release = Optional.of(exact);
                 reason = "requested at " + exact;
-            } else if (request.isPresent() && (change.kind() == ChangeKind.CHANGED || !owed.isEmpty())) {
+            } else if (request.isPresent() && (change.kind().releasable() || !owed.isEmpty())) {
                 release = Optional.of(next(module, newest.get(module), request.get().bump()));
-                reason = change.kind() == ChangeKind.CHANGED ? change.why() : owedBy(owed, releasing);
+                reason = change.kind().releasable() ? change.why() : owedBy(owed, releasing);
             } else if (request.isPresent()) {
                 reason = change.why() + ": a tag would publish the same artifact";
             } else if (!owed.isEmpty() && withDependents) {

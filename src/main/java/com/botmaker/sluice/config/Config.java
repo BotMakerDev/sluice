@@ -151,10 +151,12 @@ public record Config(Target target, String branch, String tagPattern, List<Strin
      * The Keep a Changelog feature.
      *
      * @param extractor a command that prints a version's section, instead of the built-in reader
+     * @param pins      whether the release commit writes a line per moved pin under the version's
+     *                  {@code ### Changed}; a module released with no change of its own then needs no notes
      */
-    public record ChangelogConfig(boolean enabled, Optional<Command> extractor) {
+    public record ChangelogConfig(boolean enabled, Optional<Command> extractor, boolean pins) {
 
-        public static final ChangelogConfig OFF = new ChangelogConfig(false, Optional.empty());
+        public static final ChangelogConfig OFF = new ChangelogConfig(false, Optional.empty(), false);
     }
 
     /**

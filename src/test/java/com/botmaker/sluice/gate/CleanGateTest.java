@@ -10,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.List;
 
 import static com.botmaker.sluice.testing.GateFixture.check;
@@ -42,12 +43,20 @@ class CleanGateTest {
 
     @Test
     void dirtyTreeRefused() throws IOException {
-        Files.writeString(umbrella.dir("a").resolve("notes.txt"), "not committed\n");
+        Files.writeString(umbrella.dir("a").resolve("pom.xml"), "<!-- not committed -->\n", StandardOpenOption.APPEND);
 
         GateVerdict verdict = only(verdicts());
 
         assertEquals(Status.REFUSED, verdict.status());
-        assertTrue(verdict.refusal().contains("notes.txt"), verdict.refusal());
+        assertTrue(verdict.refusal().contains("pom.xml"), verdict.refusal());
+    }
+
+    /** The release commits only what it changes: an editor's or a build's file reaches no commit of it. */
+    @Test
+    void untrackedFileIsNoConcern() throws IOException {
+        Files.writeString(umbrella.dir("a").resolve(".project"), "an editor's\n");
+
+        assertEquals(Status.OK, only(verdicts()).status(), said(verdicts()));
     }
 
     @Test

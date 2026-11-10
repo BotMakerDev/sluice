@@ -4,11 +4,14 @@ import com.botmaker.sluice.Git;
 import com.botmaker.sluice.github.GitHub;
 import com.botmaker.sluice.github.GitHub.Repo;
 import com.botmaker.sluice.github.GitHub.Run;
+import com.botmaker.sluice.model.Edge;
 import com.botmaker.sluice.model.Module;
 import com.botmaker.sluice.spi.Gate;
 import com.botmaker.sluice.spi.GateContext;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +54,9 @@ public final class CiGate implements Gate {
             return List.of(skipped("no GitHub token (GITHUB_TOKEN, or gh auth token): CI was not checked"));
         }
         String branch = ctx.config().branch();
+        Map<Module, Optional<List<Run>>> asked = new HashMap<>();
+        Function<Module, Optional<List<Run>>> runsOf = module -> asked.computeIfAbsent(module,
+                m -> repos.apply(m).flatMap(repo -> github.get().runs(repo, branch)));
         List<GateVerdict> verdicts = new ArrayList<>();
         for (Module module : ctx.plan().releasing().keySet()) {
             Optional<Repo> repo = repos.apply(module);
@@ -58,16 +64,47 @@ public final class CiGate implements Gate {
                 verdicts.add(skipped(module + ": its origin is not on GitHub, CI was not checked"));
                 continue;
             }
-            Optional<List<Run>> runs = github.get().runs(repo.get(), branch);
+            Optional<List<Run>> runs = runsOf.apply(module);
             verdicts.add(runs.isEmpty()
                     ? skipped(module + ": GitHub did not answer for " + repo.get() + ", CI was not checked")
-                    : verdict(module, branch, runs.get()));
+                    : verdict(ctx, module, branch, runs.get(), runsOf));
         }
         return verdicts;
     }
 
+    /** Each workflow's newest finished run that answers for the module: neither cancelled nor of a removed file. */
+    private static Map<String, Run> newestFinished(Module module, List<Run> runs) {
+        Map<String, Run> newest = new LinkedHashMap<>();
+        for (Run run : runs) {
+            if (run.finished() && !run.cancelled() && !run.removedFrom(module.dir().dir())) {
+                newest.putIfAbsent(run.workflow(), run);
+            }
+        }
+        return newest;
+    }
+
+    /**
+     * {@code upstream}'s newest green run, when every workflow of it is green now and that run ended after each
+     * of {@code red}: a dependent's CI builds its upstreams' branches, so it may have failed in one fixed since.
+     * Empty when a time is unknown.
+     */
+    private static Optional<Run> greenSince(Module upstream, List<Run> red,
+                                            Function<Module, Optional<List<Run>>> runsOf) {
+        Optional<String> failed = red.stream().map(Run::updated).max(String::compareTo).filter(t -> !t.isEmpty());
+        if (failed.isEmpty() || red.stream().anyMatch(run -> run.updated().isEmpty())) {
+            return Optional.empty();
+        }
+        Map<String, Run> newest = runsOf.apply(upstream).map(runs -> newestFinished(upstream, runs)).orElse(Map.of());
+        if (newest.isEmpty() || !newest.values().stream().allMatch(Run::green)) {
+            return Optional.empty();
+        }
+        return newest.values().stream().filter(run -> run.updated().compareTo(failed.get()) > 0)
+                .max(Comparator.comparing(Run::updated));
+    }
+
     /** The rule over a module's runs, newest first. */
-    private GateVerdict verdict(Module module, String branch, List<Run> runs) {
+    private GateVerdict verdict(GateContext ctx, Module module, String branch, List<Run> runs,
+                                Function<Module, Optional<List<Run>>> runsOf) {
         Map<String, Run> newestFinished = new LinkedHashMap<>();
         boolean running = false;
         for (Run run : runs) {
@@ -99,6 +136,11 @@ public final class CiGate implements Gate {
         for (Run run : red) {
             repair.append("     ").append(run.workflow()).append(": ").append(run.conclusion()).append(" at ")
                     .append(run.commit()).append("  ").append(run.url()).append('\n');
+        }
+        for (Edge edge : ctx.graph().upstreams(module)) {
+            greenSince(edge.upstream(), red, runsOf).ifPresent(green -> repair.append("     ")
+                    .append(edge.upstream()).append(" went green after it, at ").append(green.commit())
+                    .append(": if it failed in ").append(edge.upstream()).append("'s build, rerun it.\n"));
         }
         repair.append("     Fix ").append(branch).append(" first, or wait for a newer run.");
         return refused(module + ": the newest finished CI run on " + branch + " failed" + also, repair.toString());

@@ -39,12 +39,15 @@ public interface GitHub {
      * @param status     {@code completed}, or what it is doing
      * @param conclusion {@code success}, {@code failure}…; empty until it is finished
      * @param path       its workflow's file in the repository ({@code .github/workflows/ci.yml}); empty when unknown
+     * @param updated    when it last changed, ISO-8601 in UTC as GitHub gives it ({@code 2026-11-10T03:19:47Z}),
+     *                   so two compare as text; empty when unknown
      */
-    record Run(String workflow, String status, String conclusion, String url, String sha, String path) {
+    record Run(String workflow, String status, String conclusion, String url, String sha, String path,
+               String updated) {
 
-        /** A run whose workflow file is not known. */
+        /** A run whose workflow file and time are not known. */
         public Run(String workflow, String status, String conclusion, String url, String sha) {
-            this(workflow, status, conclusion, url, sha, "");
+            this(workflow, status, conclusion, url, sha, "", "");
         }
 
         /**

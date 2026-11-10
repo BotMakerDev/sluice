@@ -2,8 +2,10 @@ package com.botmaker.sluice;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Read-only git: what a decision or a gate asks. Nothing here changes a working tree, a branch or a remote;
@@ -43,9 +45,27 @@ public final class Git {
         return line(dir, "symbolic-ref", "--short", "-q", "HEAD");
     }
 
-    /** Whether the working tree has anything uncommitted, untracked files included. */
-    public static boolean dirty(Path dir) {
-        Proc.Result status = run(dir, "status", "--porcelain");
+    /**
+     * Whether a tracked file has changes not committed, staged or not. Untracked files are not counted: a release
+     * commits only what it changed, so they can reach no commit of its. A {@code status} that fails counts as
+     * changed.
+     */
+    public static boolean changed(Path dir) {
+        Proc.Result status = run(dir, "status", "--porcelain", "--untracked-files=no");
         return !status.ok() || !status.out().isBlank();
+    }
+
+    /**
+     * The files under {@code dir} git does not track and does not ignore, relative to it, {@code /}-separated: what
+     * a {@code git add} run there names them by.
+     */
+    public static Set<String> untracked(Path dir) {
+        Proc.Result files = run(dir, "-c", "core.quotePath=false", "ls-files", "--others", "--exclude-standard");
+        return files.ok() ? new LinkedHashSet<>(files.lines()) : Set.of();
+    }
+
+    /** Whether the index holds anything a commit would record. */
+    public static boolean staged(Path dir) {
+        return !run(dir, "diff", "--cached", "--quiet").ok();
     }
 }

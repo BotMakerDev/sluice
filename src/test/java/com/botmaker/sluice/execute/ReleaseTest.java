@@ -22,6 +22,7 @@ import static com.botmaker.sluice.execute.ReleaseFixture.show;
 import static com.botmaker.sluice.execute.ReleaseFixture.tags;
 import static com.botmaker.sluice.testing.GateFixture.probe;
 import static com.botmaker.sluice.testing.GateFixture.yamlList;
+import static com.botmaker.sluice.testing.PlainUmbrella.dep;
 import static com.botmaker.sluice.testing.PlainUmbrella.pom;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -185,7 +186,7 @@ class ReleaseTest {
     @Test
     void gateRefusalTagsNothing() throws Exception {
         FixtureUmbrella umbrella = pinned(tmp);
-        Files.writeString(umbrella.dir("b").resolve("dirty.txt"), "not committed\n");
+        Files.writeString(umbrella.dir("b").resolve("src/B.java"), "class B { int notCommitted; }\n");
         List<String> lines = lines();
 
         Outcome outcome = run(umbrella, EXECUTE, served(), lines, "a", "b");
@@ -194,5 +195,47 @@ class ReleaseTest {
         assertEquals(List.of("v1.0.0"), tags(umbrella, "a"));
         assertTrue(read(outcome.log().orElseThrow()).contains("REFUSED"));
         assertTrue(outcome.state().isEmpty());
+    }
+
+    /** An editor's file is in no commit of the release, and stays where it was. */
+    @Test
+    void untrackedFileStaysOutOfTheRelease() throws Exception {
+        FixtureUmbrella umbrella = pinned(tmp);
+        Files.writeString(umbrella.dir("b").resolve(".project"), "an editor's\n");
+        List<String> lines = lines();
+
+        assertEquals(Status.DONE, run(umbrella, EXECUTE, served(), lines, "a", "b").status(),
+                String.join("\n", lines));
+
+        assertFalse(FixtureUmbrella.git(umbrella.dir("b"), "ls-tree", "-r", "--name-only", "HEAD").lines()
+                .contains(".project"));
+        assertEquals("?? .project", FixtureUmbrella.git(umbrella.dir("b"), "status", "--porcelain").out().strip());
+    }
+
+    /** {@code b} changed nothing of its own: the release writes its notes, the pin it moves. */
+    @Test
+    void releaseOwedToItsUpstreamWritesItsNotes() {
+        String bReleased = "  <properties><a.version>v1.0.0</a.version></properties>\n" + dep("a", "${a.version}");
+        FixtureUmbrella umbrella = FixtureUmbrella.create(tmp)
+                .module("a", pom("a", "1.0.1-SNAPSHOT", "")).tag("a", "v1.0.0")
+                .commit("a", "src/A.java", "class A {}\n")
+                .commit("a", "CHANGELOG.md", "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- A thing.\n")
+                .push("a")
+                .module("b", pom("b", "0.1.0", bReleased)).tag("b", "v0.1.0")
+                .commit("b", "pom.xml", pom("b", "0.1.1-SNAPSHOT", bReleased.replace("v1.0.0", "1.0.1-SNAPSHOT")))
+                .commit("b", "CHANGELOG.md", "# Changelog\n\n## [0.1.0] — 2026-01-01\n\n- First.\n")
+                .push("b");
+        config(umbrella, "changelog: {pins: true}\n");
+        List<String> lines = lines();
+
+        assertEquals(Status.DONE, run(umbrella, EXECUTE, served(), lines, "a", "b").status(),
+                String.join("\n", lines));
+
+        String b = show(umbrella, "b", "v0.1.1", "CHANGELOG.md");
+        assertEquals("# Changelog\n\n## [0.1.1] — 2026-11-10\n\n### Changed\n\n- Built against a 1.0.1 (was 1.0.0).\n\n"
+                + "## [0.1.0] — 2026-01-01\n\n- First.\n", b);
+        String a = show(umbrella, "a", "v1.0.1", "CHANGELOG.md");
+        assertEquals("# Changelog\n\n## [1.0.1] — 2026-11-10\n\n### Fixed\n\n- A thing.\n", a,
+                "a pins nothing: its notes are its own");
     }
 }

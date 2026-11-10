@@ -11,6 +11,17 @@ All notable changes to this project are documented here, in the format of
   version moves only through a `${property}`, so a literal one is refused by name.
 - `kind: ignored` in `sluice.yml` leaves a submodule out of the graph though it has a pom: the release tool's own
   submodule, say.
+- `changelog: {pins: true}`: the release commit writes, under the version's `### Changed`, one line per upstream it
+  now builds against (`- Built against a 1.0.1 (was 1.0.0).`), after the module's own notes. A module released
+  with no change of its own (only for its upstreams) needs no notes then: those lines are its notes.
+- A red `ci` names each upstream whose CI went green after the failed run: a dependent's CI builds its
+  upstreams' branches, and a rerun may pass.
+
+### Changed
+
+- Untracked files are no concern of a release: `clean` no longer refuses them, and the release and snapshot
+  commits stage the tracked files and what a step created, never a file that was untracked before the run (an
+  editor's, a build's).
 
 ### Fixed
 
@@ -24,6 +35,7 @@ All notable changes to this project are documented here, in the format of
 - `builds-at-pins` asks for a pinned upstream's repository only when the module's build fetches it: a version that
   only its `<dependencyManagement>` names is fetched by the poms that inherit it, from their own repositories. A
   bom imported there (`<scope>import</scope>`) is fetched by the module's own build, and still needs it.
+- A refused run says "refused: nothing was tagged" once.
 
 ## [0.1.0] - 2026-11-10
 

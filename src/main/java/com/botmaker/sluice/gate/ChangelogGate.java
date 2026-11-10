@@ -4,6 +4,8 @@ import com.botmaker.sluice.Changelog;
 import com.botmaker.sluice.Proc;
 import com.botmaker.sluice.Version;
 import com.botmaker.sluice.config.Config.Command;
+import com.botmaker.sluice.decide.ChangeKind;
+import com.botmaker.sluice.decide.Decision;
 import com.botmaker.sluice.model.Module;
 import com.botmaker.sluice.spi.Gate;
 import com.botmaker.sluice.spi.GateContext;
@@ -19,6 +21,9 @@ import java.util.Optional;
  * Every module released says what its release holds: its {@code CHANGELOG.md} has notes under the version, or
  * under {@code [Unreleased]}, which the release stamps. The notes become the release's page, and a pushed tag
  * cannot be edited. Off unless the configuration turns the changelog on.
+ *
+ * <p>With the changelog's {@code pins} on, a module released with no change of its own (only for its upstreams)
+ * needs no notes: its release commit writes them, one line per pin it moves.
  *
  * <p>A configured extractor replaces the built-in reader: the command, given the version as its last argument,
  * prints the notes and exits 0, or the module has none.
@@ -37,10 +42,29 @@ public final class ChangelogGate implements Gate {
         }
         Optional<Command> extractor = ctx.config().changelog().extractor();
         List<GateVerdict> verdicts = new ArrayList<>();
-        ctx.plan().releasing().forEach((module, version) -> verdicts.add(extractor.isPresent()
+        ctx.plan().releasing().forEach((module, version) -> verdicts.add(pinsOnly(ctx, module)
+                ? ok(module + ": no change of its own; its notes are the pins its release commit moves")
+                : extractor.isPresent()
                 ? extracted(ctx, extractor.get(), module, version)
                 : read(module, version)));
         return verdicts;
+    }
+
+    /**
+     * Whether the release writes the module's notes: the changelog's {@code pins} is on, nothing of its own
+     * changed, and an upstream it pins was released since its tag or is released by this run.
+     */
+    private static boolean pinsOnly(GateContext ctx, Module module) {
+        if (!ctx.config().changelog().pins()) {
+            return false;
+        }
+        Optional<ChangeKind> change = ctx.plan().decisions().stream().filter(d -> d.module().equals(module))
+                .map(Decision::change).findFirst();
+        if (change.isEmpty() || change.get() == ChangeKind.CHANGED) {
+            return false;
+        }
+        return change.get() == ChangeKind.UPSTREAMS || ctx.graph().upstreams(module).stream()
+                .anyMatch(edge -> ctx.plan().releasing().containsKey(edge.upstream()));
     }
 
     private GateVerdict read(Module module, Version version) {

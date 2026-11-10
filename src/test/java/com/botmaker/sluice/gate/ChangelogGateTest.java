@@ -55,6 +55,15 @@ class ChangelogGateTest {
         assertTrue(verdict.refusal().contains("## [Unreleased]"), verdict.refusal());
     }
 
+    /** Pins on, a module with changes of its own still needs its notes written by a person. */
+    @Test
+    void ownChangesNeedNotesThoughPinsAreOn() {
+        umbrella.commit("a", "CHANGELOG.md", "# Changelog\n");
+
+        assertEquals(Status.REFUSED, only(check(new ChangelogGate(), umbrella,
+                ConfigLoader.parse("changelog: {pins: true}\n", "t"), "a")).status());
+    }
+
     @Test
     void emptyUnreleasedSectionRefused() {
         umbrella.commit("a", "CHANGELOG.md", "# Changelog\n\n## [Unreleased]\n\n## [0.0.0]\n\n- Old.\n");

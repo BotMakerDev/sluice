@@ -49,6 +49,11 @@ public final class Tags {
         return bare.isEmpty() || !Character.isDigit(bare.charAt(0)) ? Optional.empty() : Version.parse(bare);
     }
 
+    /** The released version a pin's text names, bare or as its tag; empty for a snapshot or anything else. */
+    public static Optional<Version> released(String pinned, String tagPattern) {
+        return version(pinned, tagPattern).or(() -> version(pinned, Version.PLACEHOLDER));
+    }
+
     /** Whether this checkout can read the tag of {@code version} as a commit. */
     public static boolean resolves(Module module, Version version, String tagPattern) {
         return Git.run(module.dir().dir(), "rev-parse", "-q", "--verify",

@@ -102,12 +102,7 @@ public final class ConfigLoader {
                 optional(top, "changelog").map(ConfigLoader::changelog).orElse(ChangelogConfig.OFF),
                 optional(top, "gates").map(n -> n.list().stream().map(ConfigLoader::gate).toList()).orElse(List.of()),
                 optional(top, "steps").map(n -> n.list().stream().map(ConfigLoader::step).toList()).orElse(List.of()),
-                optional(top, "github-releases").map(n -> {
-                    if (n.value() instanceof Boolean on) {
-                        return on;
-                    }
-                    throw n.wrong("must be true or false");
-                }).orElse(defaults.githubReleases()));
+                optional(top, "github-releases").map(ConfigLoader::bool).orElse(defaults.githubReleases()));
     }
 
     private static Target target(Node node) {
@@ -173,10 +168,18 @@ public final class ConfigLoader {
 
     private static ChangelogConfig changelog(Node node) {
         if (node.value() instanceof Boolean on) {
-            return on ? new ChangelogConfig(true, Optional.empty()) : ChangelogConfig.OFF;
+            return on ? new ChangelogConfig(true, Optional.empty(), false) : ChangelogConfig.OFF;
         }
-        Map<String, Node> keys = node.map(Set.of("extractor"));
-        return new ChangelogConfig(true, optional(keys, "extractor").map(ConfigLoader::command));
+        Map<String, Node> keys = node.map(Set.of("extractor", "pins"));
+        return new ChangelogConfig(true, optional(keys, "extractor").map(ConfigLoader::command),
+                optional(keys, "pins").map(ConfigLoader::bool).orElse(false));
+    }
+
+    private static boolean bool(Node node) {
+        if (node.value() instanceof Boolean on) {
+            return on;
+        }
+        throw node.wrong("must be true or false");
     }
 
     private static CommandConfig gate(Node node) {

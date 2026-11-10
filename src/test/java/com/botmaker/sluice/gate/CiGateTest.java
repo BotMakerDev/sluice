@@ -16,8 +16,10 @@ import java.util.Optional;
 
 import static com.botmaker.sluice.testing.GateFixture.check;
 import static com.botmaker.sluice.testing.GateFixture.only;
+import static com.botmaker.sluice.testing.PlainUmbrella.dep;
 import static com.botmaker.sluice.testing.PlainUmbrella.pom;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CiGateTest {
@@ -95,14 +97,41 @@ class CiGateTest {
     @Test
     void aRemovedWorkflowsFailureIsIgnored() {
         Run gone = new Run("build", "completed", "failure", "https://example.invalid/7", "ffffffffff",
-                ".github/workflows/build.yml");
+                ".github/workflows/build.yml", "");
         Run pages = new Run("pages", "completed", "failure", "https://example.invalid/8", "ffffffffff",
-                "dynamic/pages/pages-build-deployment");
+                "dynamic/pages/pages-build-deployment", "");
 
         assertEquals(Status.OK, verdict(Optional.of(List.of(passedAtHead(), gone))).status(),
                 "a workflow no longer in the module says nothing of its branch now");
         assertEquals(Status.REFUSED, verdict(Optional.of(List.of(passedAtHead(), pages))).status(),
                 "GitHub's own workflows have no file, and still count");
+    }
+
+    /** A dependent's CI builds its upstream's branch: an upstream green since it failed is named. */
+    @Test
+    void anUpstreamGreenSinceTheFailureIsNamed() {
+        FixtureUmbrella two = FixtureUmbrella.create(tmp.resolve("two"))
+                .module("a", pom("a", "1.0.0-SNAPSHOT", ""))
+                .module("b", pom("b", "0.1.0-SNAPSHOT", "  <properties><a.version>1.0.0-SNAPSHOT</a.version>"
+                        + "</properties>\n" + dep("a", "${a.version}")));
+        Run failed = new Run("ci", "completed", "failure", "https://example.invalid/9", "bbbbbbbbbb", "",
+                "2026-11-10T03:20:00Z");
+        Run greenBefore = new Run("ci", "completed", "success", "https://example.invalid/10", "aaaaaaaaaa", "",
+                "2026-11-10T03:00:00Z");
+        Run greenAfter = new Run("ci", "completed", "success", "https://example.invalid/11", "9999999999", "",
+                "2026-11-10T04:00:00Z");
+
+        GateVerdict named = only(check(new CiGate(Optional.of((repo, branch) -> Optional.of(
+                repo.name().equals("a") ? List.of(greenAfter) : List.of(failed))),
+                module -> Optional.of(new Repo("owner", module.name()))), two, Config.defaults(), "b"));
+        GateVerdict notNamed = only(check(new CiGate(Optional.of((repo, branch) -> Optional.of(
+                repo.name().equals("a") ? List.of(greenBefore) : List.of(failed))),
+                module -> Optional.of(new Repo("owner", module.name()))), two, Config.defaults(), "b"));
+
+        assertEquals(Status.REFUSED, named.status());
+        assertTrue(named.refusal().contains("a went green after it, at 9999999: if it failed in a's build, rerun it"),
+                named.refusal());
+        assertFalse(notNamed.refusal().contains("went green"), notNamed.refusal());
     }
 
     @Test

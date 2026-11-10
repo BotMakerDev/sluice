@@ -42,6 +42,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -280,6 +281,8 @@ public final class Release {
         private final Map<Module, Version> released;
         private final Map<Module, Optional<Version>> tagged = new HashMap<>();
         private final Set<Module> moved = new LinkedHashSet<>();
+        /** Each module's untracked files before this run first changed it: none of them is committed. */
+        private final Map<Module, Set<String>> untracked = new HashMap<>();
         private final List<Entry> entries = new ArrayList<>();
         private Optional<Path> base = Optional.empty();
 
@@ -331,7 +334,6 @@ public final class Release {
                 events.accept(new Event.Verdict(verdict));
             });
             if (Gates.refused(verdicts)) {
-                runner.say("refused: nothing was tagged");
                 if (!options.execute()) {
                     return new Outcome(Status.REFUSED, Optional.empty(), Optional.empty());
                 }
@@ -384,6 +386,7 @@ public final class Release {
             Map<String, String> facts = Facts.of(umbrella, released, module, config.tagPattern(), runner.dryRun());
             Stage stage = entries.get(at).stage();
             moved.add(module);
+            untracked.computeIfAbsent(module, m -> Git.untracked(m.dir().dir()));
             if (stage == Stage.DECIDED) {
                 stopIfAsked();
                 releaseCommit(module, version, facts);
@@ -427,6 +430,7 @@ public final class Release {
 
         private void releaseCommit(Module module, Version version, Map<String, String> facts) {
             List<Move> pins = new ArrayList<>();
+            Map<Edge, Version> pinnedAt = new LinkedHashMap<>();
             for (Edge edge : graph.upstreams(module)) {
                 for (Pin pin : edge.pins()) {
                     Optional<String> value = releaseValue(edge.upstream(), pin);
@@ -435,8 +439,14 @@ public final class Release {
                                 + umbrella.relativize(pin.file().toAbsolutePath()) + " stays as it is");
                     } else {
                         pins.add(new Move(pin, value.get()));
+                        pinnedAt.put(edge, releaseVersion(edge.upstream()).orElseThrow());
                     }
                 }
+            }
+            if (config.changelog().enabled() && config.changelog().pins()) {
+                Optional<String> tag = tagged.computeIfAbsent(module, m -> Tags.newest(m, config.tagPattern()))
+                        .map(v -> v.tag(config.tagPattern()));
+                PinNotes.write(runner, module, PinNotes.lines(module, pinnedAt, tag, config.tagPattern()));
             }
             // The parent first: every goal of versions:set resolves the parent the pom names.
             pins.stream().filter(m -> m.pin() instanceof Pin.Parent).forEach(m -> moves.move(m.pin(), m.value()));
@@ -451,10 +461,14 @@ public final class Release {
 
         /** What a release commit pins {@code upstream} at: this run's version of it, else its newest tag. */
         private Optional<String> releaseValue(Module upstream, Pin pin) {
-            Optional<Version> version = released.containsKey(upstream) ? Optional.of(released.get(upstream))
-                    : tagged.computeIfAbsent(upstream, u -> Tags.newest(u, config.tagPattern()));
-            return version.map(v -> (pin instanceof Pin.Text text ? text.spelling()
+            return releaseVersion(upstream).map(v -> (pin instanceof Pin.Text text ? text.spelling()
                     : targets.apply(upstream).spelling()).spell(v, config.tagPattern()));
+        }
+
+        /** The version a release commit pins {@code upstream} at, unspelled. */
+        private Optional<Version> releaseVersion(Module upstream) {
+            return released.containsKey(upstream) ? Optional.of(released.get(upstream))
+                    : tagged.computeIfAbsent(upstream, u -> Tags.newest(u, config.tagPattern()));
         }
 
         private void tag(Module module, Version version) {
@@ -520,7 +534,7 @@ public final class Release {
                     continue;
                 }
                 // Its commit and push must carry the pin only: never the author's own work.
-                if (!runner.dryRun() && (Git.dirty(dir) || !Git.run(dir, "rev-list", "origin/" + config.branch()
+                if (!runner.dryRun() && (Git.changed(dir) || !Git.run(dir, "rev-list", "origin/" + config.branch()
                         + "..HEAD").out().isBlank())) {
                     runner.say("    " + dependent + " has uncommitted or unpushed work: its pin of " + module
                             + " stays");
@@ -564,10 +578,21 @@ public final class Release {
             return true;
         }
 
+        /**
+         * Commits what the release changed: every tracked file, and each file a step created. A file that was
+         * untracked before this run touched the module (an editor's, a build's) is never added.
+         */
         private void commit(Module module, String message) {
             Path dir = module.dir().dir();
-            must(runner.git(dir, "add", "-A"), module + ": staging");
-            if (!runner.dryRun() && !Git.dirty(dir)) {
+            must(runner.git(dir, "add", "-u"), module + ": staging");
+            Set<String> before = untracked.getOrDefault(module, Set.of());
+            List<String> created = Git.untracked(dir).stream().filter(f -> !before.contains(f)).toList();
+            if (!created.isEmpty()) {
+                List<String> add = new ArrayList<>(List.of("add", "--"));
+                add.addAll(created);
+                must(runner.git(dir, add.toArray(String[]::new)), module + ": staging");
+            }
+            if (!runner.dryRun() && !Git.staged(dir)) {
                 runner.say("    " + module + ": nothing to commit");
                 return;
             }

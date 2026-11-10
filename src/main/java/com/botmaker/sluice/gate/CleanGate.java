@@ -12,8 +12,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Every module released is on its release branch, with nothing uncommitted and nothing its remote has that it
- * lacks. A submodule on a detached {@code HEAD} is the usual state after {@code git submodule update}.
+ * Every module released is on its release branch, with no tracked file uncommitted and nothing its remote has
+ * that it lacks. An untracked file is no concern of a release, which commits only what it changes. A submodule on a detached {@code HEAD} is the usual state after {@code git submodule update}.
  */
 public final class CleanGate implements Gate {
 
@@ -36,7 +36,8 @@ public final class CleanGate implements Gate {
                 verdicts.add(refused(module + " is on " + on.map(b -> "branch " + b).orElse("a detached HEAD")
                         + ", not on " + branch, "     git -C " + module + " switch " + branch));
             }
-            Proc.Result status = Git.run(dir, "status", "--porcelain");
+            // Untracked files are left out: the release commits only the files it changes.
+            Proc.Result status = Git.run(dir, "status", "--porcelain", "--untracked-files=no");
             if (!status.ok()) {
                 verdicts.add(skipped(module + ": git status failed, its tree was not checked"));
             } else if (!status.lines().isEmpty()) {
