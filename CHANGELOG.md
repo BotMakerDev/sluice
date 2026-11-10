@@ -5,6 +5,8 @@ All notable changes to this project are documented here, in the format of
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-10
+
 ### Added
 
 - Versions, levels and the process runner; a preview runner that echoes every command and runs none. On Windows a
