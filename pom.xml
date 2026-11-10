@@ -4,10 +4,14 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- JitPack serves this repository under com.github.BotMakerDev, so the build's coordinate is the published one. -->
+    <!-- JitPack serves this repository under com.github.BotMakerDev, so the build's coordinate is the published one.
+         The artifactId stays the repository's name: JitPack's build API and its whole-repository coordinate
+         (com.github.BotMakerDev:sluice:<tag>) are by that name, and each module below is served as
+         com.github.BotMakerDev.sluice:<artifactId>:<tag>. -->
     <groupId>com.github.BotMakerDev</groupId>
     <artifactId>sluice</artifactId>
     <version>0.2.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
 
     <name>sluice</name>
     <description>
@@ -23,97 +27,90 @@
         </license>
     </licenses>
 
+    <!-- One version for every module: versions:set at this pom moves each child's <parent> with it. -->
+    <modules>
+        <!-- The library: config, decisions, gates, the release itself. What a program embeds. -->
+        <module>core</module>
+        <!-- The sluice command over it, and its shaded jar. -->
+        <module>cli</module>
+    </modules>
+
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
-    <dependencies>
-        <!-- sluice.yml. -->
-        <dependency>
-            <groupId>org.snakeyaml</groupId>
-            <artifactId>snakeyaml-engine</artifactId>
-            <version>2.9</version>
-        </dependency>
-        <!-- The command line, in the cli package only. Optional: the shaded jar carries it, while a program that
-             takes sluice as a library (a release window) does not resolve it. -->
-        <dependency>
-            <groupId>info.picocli</groupId>
-            <artifactId>picocli</artifactId>
-            <version>4.7.6</version>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>5.10.2</version>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.github.BotMakerDev</groupId>
+                <artifactId>sluice-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.BotMakerDev</groupId>
+                <artifactId>sluice-core</artifactId>
+                <version>${project.version}</version>
+                <type>test-jar</type>
+            </dependency>
+            <dependency>
+                <groupId>org.snakeyaml</groupId>
+                <artifactId>snakeyaml-engine</artifactId>
+                <version>2.9</version>
+            </dependency>
+            <dependency>
+                <groupId>info.picocli</groupId>
+                <artifactId>picocli</artifactId>
+                <version>4.7.6</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>5.10.2</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <!-- Pinned for JitPack: its Maven defaults the compiler to 3.1, which ignores maven.compiler.release.
+                     3.11.0, not newer: 3.12.0 needs Maven 3.6.3. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.11.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.2.5</version>
+                    <configuration>
+                        <!-- BuildsAtPinsGateTest runs Maven in an empty local repository; this one stands in for
+                             Central there, so the test needs no network. -->
+                        <systemPropertyVariables>
+                            <sluice.test.repository>${settings.localRepository}</sluice.test.repository>
+                        </systemPropertyVariables>
+                    </configuration>
+                </plugin>
+                <!-- 3.3.0, not newer: 3.4.0 needs Maven 3.6.3. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.3.0</version>
+                </plugin>
+                <!-- Held at 3.5.1: 3.5.2 needs Maven 3.6.3, newer than some builders run. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>3.5.1</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
-            <!-- Pinned for JitPack: its Maven defaults the compiler to 3.1, which ignores maven.compiler.release.
-                 3.11.0, not newer: 3.12.0 needs Maven 3.6.3. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
-                <configuration>
-                    <!-- BuildsAtPinsGateTest runs Maven in an empty local repository; this one stands in for
-                         Central there, so the test needs no network. -->
-                    <systemPropertyVariables>
-                        <sluice.test.repository>${settings.localRepository}</sluice.test.repository>
-                    </systemPropertyVariables>
-                </configuration>
-            </plugin>
-            <!-- sluice-<version>-all.jar, the command: every dependency inside, run by java -jar. Held at 3.5.1:
-                 3.5.2 needs Maven 3.6.3, newer than some builders run. -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.5.1</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <shadedArtifactAttached>true</shadedArtifactAttached>
-                            <shadedClassifierName>all</shadedClassifierName>
-                            <createDependencyReducedPom>false</createDependencyReducedPom>
-                            <transformers>
-                                <transformer
-                                        implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.botmaker.sluice.cli.Main</mainClass>
-                                    <!-- Read back by the version option of the command. -->
-                                    <manifestEntries>
-                                        <Implementation-Title>sluice</Implementation-Title>
-                                        <Implementation-Version>${project.version}</Implementation-Version>
-                                    </manifestEntries>
-                                </transformer>
-                            </transformers>
-                            <filters>
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>module-info.class</exclude>
-                                        <exclude>META-INF/versions/*/module-info.class</exclude>
-                                        <exclude>META-INF/*.SF</exclude>
-                                        <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
-                        </configuration>
-                    </execution>
-                </executions>
             </plugin>
         </plugins>
     </build>

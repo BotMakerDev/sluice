@@ -1,6 +1,7 @@
 # ── Maven ─────────────────────────────────────────────────
 # The build's output only: a package named target is source.
 /target/
+/*/target/
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup

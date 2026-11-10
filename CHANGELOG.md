@@ -3,6 +3,14 @@
 All notable changes to this project are documented here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- sluice is two Maven modules at one version: `core` (`sluice-core`, the library, which prints nothing) and `cli`
+  (`sluice-cli`, the command and its `-all` jar). A program embeds
+  `com.github.BotMakerDev.sluice:sluice-core:<tag>` from JitPack. The packages and their names are unchanged.
+
 ## [0.2.0] — 2026-11-10
 
 ### Added

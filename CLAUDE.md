@@ -5,6 +5,8 @@ A release tool for a Maven project split over the git submodules of one umbrella
 `docs/superpowers/plans/2026-11-10-sluice.md` there.
 
 - **Generic.** No main source names BotMaker (`NoBotMakerTest`); BotMaker is one user, through `sluice.yml`.
+- **Modules, one version:** `core/` (`sluice-core`: every package but `cli`) and `cli/` (`sluice-cli`: the command,
+  its shaded `cli/target/sluice-cli-<version>-all.jar`). `core` attaches its test fixtures as a `test-jar`.
 - **A library first.** `com.botmaker.sluice` prints nothing. Only `cli` writes to a terminal.
 - **Every side effect goes through `Runner`.** A preview echoes it and runs none of it.
 - **Shell to `git` and `mvn`**, never embed them. Versions move only through `versions-maven-plugin`.

@@ -2,6 +2,7 @@ package com.botmaker.sluice.decide;
 
 import com.botmaker.sluice.Git;
 import com.botmaker.sluice.Proc;
+import com.botmaker.sluice.Refusal;
 import com.botmaker.sluice.Version;
 import com.botmaker.sluice.config.Config;
 import com.botmaker.sluice.model.Coordinate;
@@ -12,6 +13,7 @@ import com.botmaker.sluice.model.Pin;
 import com.botmaker.sluice.model.PinReader;
 import com.botmaker.sluice.model.PomDiff;
 import com.botmaker.sluice.model.PomFile;
+import com.botmaker.sluice.model.PomReader;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -89,7 +91,8 @@ final class Changes {
                 .flatMap(e -> e.pins().stream())
                 .filter(p -> p.file().toAbsolutePath().normalize().equals(path))
                 .toList();
-        if (!ownPom && pins.isEmpty()) {
+        boolean childPom = !ownPom && path.getFileName().toString().equals("pom.xml");
+        if (!ownPom && !childPom && pins.isEmpty()) {
             return false;
         }
         Optional<String> shownBefore = Git.show(dir, ref, file);
@@ -97,15 +100,20 @@ final class Changes {
         if (shownBefore.isEmpty() || shownAfter.isEmpty()) {
             return false;
         }
+        // A child of the module's own pom: versions:set moved its <parent> version with the root's.
+        childPom = childPom && namesAsParent(path, shownAfter.get(), module);
+        if (!ownPom && !childPom && pins.isEmpty()) {
+            return false;
+        }
         List<Pin.Text> texts = pins.stream().filter(Pin.Text.class::isInstance).map(Pin.Text.class::cast).toList();
         String before = withoutVersions(shownBefore.get(), texts);
         String after = withoutVersions(shownAfter.get(), texts);
-        if (!ownPom && texts.size() == pins.size()) {
+        if (!ownPom && !childPom && texts.size() == pins.size()) {
             return before.equals(after);
         }
         Set<String> properties = new LinkedHashSet<>();
         Set<Coordinate> dependencies = new LinkedHashSet<>();
-        boolean parent = false;
+        boolean parent = childPom;
         for (Pin pin : pins) {
             switch (pin) {
                 case Pin.Property property -> properties.add(property.name());
@@ -125,6 +133,16 @@ final class Changes {
         }
         return PomDiff.sameButVersions(path, before, after,
                 new PomDiff.Moved(ownPom, parent, properties, dependencies));
+    }
+
+    /** Whether the pom {@code text} names the module's own pom as its {@code <parent>}. */
+    private static boolean namesAsParent(Path pom, String text, Module module) {
+        try {
+            return PomReader.read(pom, text).parent()
+                    .filter(p -> module.coordinate().filter(p.coordinate()::equals).isPresent()).isPresent();
+        } catch (Refusal unreadable) {
+            return false;
+        }
     }
 
     private static String withoutVersions(String text, List<Pin.Text> pins) {

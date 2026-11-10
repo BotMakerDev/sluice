@@ -43,7 +43,9 @@ jobs:
         shell: bash
         run: |
           mvn -B package -DskipTests
-          mv target/sluice-*-all.jar target/sluice-all.jar
+          # The cli module builds the command; the packages take it from the root's target/.
+          mkdir -p target
+          mv cli/target/sluice-cli-*-all.jar target/sluice-all.jar
           java -jar target/sluice-all.jar --version
       - name: Cut the runtime
         shell: bash
@@ -105,7 +107,7 @@ jobs:
         run: |
           mvn -B package -DskipTests
           mkdir -p target/input
-          mv target/sluice-*-all.jar target/input/sluice-all.jar
+          mv cli/target/sluice-cli-*-all.jar target/input/sluice-all.jar
       - name: Build the MSI and the zip
         shell: bash
         run: |

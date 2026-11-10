@@ -147,6 +147,36 @@ class DecideTest {
         assertEquals(ChangeKind.NONE, of(plan, "b").change());
     }
 
+    /** A multi-module pom's child names its parent's version, which versions:set moves with the root's. */
+    @Test
+    void childPomsParentVersionMovedIsNoChange() {
+        umbrella.module("a", pom("a", "1.0.0", "  <packaging>pom</packaging>\n"))
+                .commit("a", "core/pom.xml", child("1.0.0")).tag("a", "v1.0.0")
+                .commit("a", "pom.xml", pom("a", "1.0.1-SNAPSHOT", "  <packaging>pom</packaging>\n"))
+                .commit("a", "core/pom.xml", child("1.0.1-SNAPSHOT"));
+
+        Decision a = of(decide(Optional.of(Level.PATCH), false), "a");
+        assertEquals(ChangeKind.NONE, a.change(), a.toString());
+    }
+
+    @Test
+    void childPomChangedBeyondItsParentVersionIsAChange() {
+        umbrella.module("a", pom("a", "1.0.0", "  <packaging>pom</packaging>\n"))
+                .commit("a", "core/pom.xml", child("1.0.0")).tag("a", "v1.0.0")
+                .commit("a", "core/pom.xml", child("1.0.0").replace("a-core", "a-lib"));
+
+        assertEquals(Map.of("a", "1.0.1"), releasing(decide(Optional.of(Level.PATCH), false)));
+    }
+
+    private static String child(String parentVersion) {
+        return "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n"
+                + "  <modelVersion>4.0.0</modelVersion>\n"
+                + "  <parent><groupId>g</groupId><artifactId>a</artifactId><version>" + parentVersion
+                + "</version></parent>\n"
+                + "  <artifactId>a-core</artifactId>\n"
+                + "</project>\n";
+    }
+
     @Test
     void pomChangedBeyondVersionsIsAChange() {
         umbrella.module("a", pom("a", "1.0.0", "")).tag("a", "v1.0.0")
