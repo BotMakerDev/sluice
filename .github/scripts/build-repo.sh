@@ -36,6 +36,10 @@ DEB="${debs[0]}"
 SIGNING=0
 if [ "${SLUICE_SIGN:-0}" = "1" ] && [ -n "${GPG_KEY_ID:-}" ]; then
   SIGNING=1
+elif [[ "${GITHUB_REF:-}" == refs/tags/* ]] && [ "${SLUICE_ALLOW_UNSIGNED:-0}" != "1" ]; then
+  # A tag deploys the real site: never one whose snippets turn the checks off.
+  echo "::error::a tag's repositories are signed: GPG_KEY_ID and GPG_PRIVATE_KEY are missing."
+  exit 1
 else
   echo "::warning::signing not configured: publishing repositories nothing can verify."
 fi

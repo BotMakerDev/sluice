@@ -45,18 +45,18 @@ main() {
   if command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
     local pm
     pm="$(command -v dnf || command -v yum)"
-    info "Registering the sluice repository for ${pm##*/}"
-    # The file is dropped in rather than added by `dnf config-manager`, whose dnf4 and dnf5 spellings differ.
-    curl -fsSL -o /etc/yum.repos.d/sluice.repo "${BASE_URL}/sluice.repo"
-
     # The key in rpm's database before the first install, as Studio's installer does, so no import prompt waits
-    # on a terminal this pipe does not have.
-    if grep -q '^gpgkey=' /etc/yum.repos.d/sluice.repo; then
-      info "Importing the signing key"
-      fetch_key /tmp/sluice.asc.$$
-      rpm --import /tmp/sluice.asc.$$
-      rm -f /tmp/sluice.asc.$$
-    fi
+    # on a terminal this pipe does not have. Kept where the .repo below names it, a root-only directory.
+    info "Importing the signing key"
+    install -d -m 755 /etc/pki/rpm-gpg
+    fetch_key /etc/pki/rpm-gpg/sluice.asc
+    rpm --import /etc/pki/rpm-gpg/sluice.asc
+
+    info "Registering the sluice repository for ${pm##*/}"
+    # Written here, not downloaded: both checks are on whatever the site serves. Dropped in rather than added by
+    # `dnf config-manager`, whose dnf4 and dnf5 spellings differ.
+    printf '[sluice]\nname=sluice\nbaseurl=%s/rpm\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=file:///etc/pki/rpm-gpg/sluice.asc\n' \
+      "$BASE_URL" > /etc/yum.repos.d/sluice.repo
 
     info "Installing"
     "$pm" install -y sluice </dev/null

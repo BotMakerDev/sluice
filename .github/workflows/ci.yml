@@ -54,7 +54,7 @@ jobs:
             --output target/runtime
           target/runtime/bin/java -jar target/sluice-all.jar --version
       # The rpm is signed, for dnf's gpgcheck (packaging/nfpm.yaml); GPG_PRIVATE_KEY is base64 of the armored
-      # private key, what nfpm's key_file reads once decoded. Without the secret the rpm is built unsigned.
+      # private key, what nfpm's key_file reads once decoded. Without the secret the job fails.
       - name: Build the rpm and the deb
         shell: bash
         env:
@@ -73,7 +73,9 @@ jobs:
             trap 'rm -f "$RUNNER_TEMP/signing.asc"' EXIT
             (umask 077; echo "$GPG_PRIVATE_KEY" | base64 -d > "$NFPM_RPM_KEY_FILE")
           else
-            echo "::warning::GPG_PRIVATE_KEY is unset: the rpm is unsigned, and dnf refuses it under gpgcheck=1."
+            # The site's dnf repository has gpgcheck=1, so an unsigned rpm would be one nobody can install.
+            echo "::error::GPG_PRIVATE_KEY is unset: a tag's rpm is signed."
+            exit 1
           fi
           "$RUNNER_TEMP/nfpm" package -f packaging/nfpm.yaml -p rpm -t target/sluice.rpm
           "$RUNNER_TEMP/nfpm" package -f packaging/nfpm.yaml -p deb -t target/sluice.deb
