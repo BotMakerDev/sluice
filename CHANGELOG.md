@@ -3,7 +3,7 @@
 All notable changes to this project are documented here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.1] — 2026-11-13
 
 ### Added
 
