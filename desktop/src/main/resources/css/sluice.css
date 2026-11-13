@@ -1,0 +1,974 @@
+/*
+ * The whole look of sluice-desktop, in one file: two palettes of tokens, then rules that read only tokens.
+ *
+ * Two themes: tokens redefined on the root, never per-control colours. ui/Themed puts "theme-dark" or "theme-light" on the scene root of EVERY window — the main one, each
+ * dialog, each context menu, tooltip and combo-box popup — because each of those is a separate scene and a
+ * token defined on the main root does not reach it. That gap was the black-on-white dialog.
+ *
+ * The rule for anything added below: a colour is a -bm-* token, never a literal. A literal is right in one
+ * theme by construction and wrong in the other.
+ */
+
+/* ── tokens ──────────────────────────────────────────────────────────────── */
+
+.root,
+.root.theme-dark {
+    -bm-bg: #1e1f22;
+    -bm-bg-raised: #2b2d30;
+    -bm-bg-input: #25272a;
+    -bm-line: #3c3f43;
+    -bm-text: #dfe1e5;
+    -bm-text-dim: #9da0a8;
+    -bm-accent: #4c8dff;
+    -bm-on-accent: #ffffff;
+    -bm-selection: #2e4a7a;
+    -bm-ok: #59a869;
+    -bm-warn: #d9a343;
+    -bm-danger: #e5534b;
+
+    /* Modena derives every control it paints from these three; pointing them at the tokens is what makes
+       the controls this file never names (a spinner, a scroll bar's track) follow the theme too. */
+    -fx-base: -bm-bg-raised;
+    -fx-background: -bm-bg;
+    -fx-control-inner-background: -bm-bg-input;
+    -fx-accent: -bm-accent;
+    -fx-focus-color: -bm-accent;
+    -fx-faint-focus-color: transparent;
+    -fx-selection-bar: -bm-selection;
+    -fx-selection-bar-non-focused: -bm-selection;
+    -fx-text-background-color: -bm-text;
+    -fx-text-inner-color: -bm-text;
+    -fx-prompt-text-fill: -bm-text-dim;
+
+    -fx-font-family: "Inter", "Segoe UI", "Cantarell", sans-serif;
+    -fx-font-size: 13px;
+}
+
+.root.theme-light {
+    -bm-bg: #f5f6f8;
+    -bm-bg-raised: #ffffff;
+    -bm-bg-input: #ffffff;
+    -bm-line: #d3d7de;
+    -bm-text: #1f2328;
+    -bm-text-dim: #5c636e;
+    -bm-accent: #2f6fdb;
+    -bm-on-accent: #ffffff;
+    -bm-selection: #cfe0fb;
+    -bm-ok: #2e8540;
+    -bm-warn: #a86400;
+    -bm-danger: #cf222e;
+}
+
+/* The main window's background. Not on .root: a popup's scene root is a .root too, and painting it would
+   put a square behind a rounded context menu. */
+.app-root {
+    -fx-background-color: -bm-bg;
+}
+
+.label,
+.check-box,
+.radio-button,
+.hyperlink {
+    -fx-text-fill: -bm-text;
+}
+
+/* ── top bar ─────────────────────────────────────────────────────────────── */
+
+.top-bar {
+    -fx-background-color: -bm-bg-raised;
+    -fx-border-color: transparent transparent -bm-line transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-alignment: center-left;
+}
+
+.umbrella-bar {
+    -fx-alignment: center-left;
+}
+
+.umbrella-path {
+    -fx-font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    -fx-text-fill: -bm-text;
+}
+
+/* Nothing chosen yet — the one state where this label is an instruction rather than a fact. */
+.umbrella-path:unset {
+    -fx-text-fill: -bm-warn;
+    /* The root's family, spelled out: JavaFX has no `inherit` for a font property (it throws converting it). */
+    -fx-font-family: "Inter", "Segoe UI", "Cantarell", sans-serif;
+}
+
+/* An installed build whose cli the checkout has moved past: a fact to read before trusting a preview. */
+.cli-notice {
+    -fx-text-fill: -bm-warn;
+    -fx-font-size: 12px;
+}
+
+.account-bar {
+    -fx-alignment: center-right;
+}
+
+.account-login {
+    -fx-text-fill: -bm-text-dim;
+}
+
+.theme-toggle {
+    -fx-font-size: 14px;
+    -fx-padding: 2 8 2 8;
+}
+
+/* ── buttons ─────────────────────────────────────────────────────────────── */
+
+.button,
+.toggle-button {
+    -fx-background-color: -bm-bg;
+    -fx-text-fill: -bm-text;
+    -fx-border-color: -bm-line;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 4 10 4 10;
+    -fx-cursor: hand;
+}
+
+.button:hover,
+.toggle-button:hover {
+    -fx-border-color: -bm-accent;
+}
+
+.button:default {
+    -fx-border-color: -bm-accent;
+}
+
+.button:disabled,
+.toggle-button:disabled {
+    -fx-opacity: 0.5;
+    -fx-cursor: default;
+}
+
+/*
+ * The one button in this window that pushes a tag.
+ *
+ * It is marked rather than merely labelled because it is the only irreversible thing here: every other
+ * write opens a pull request somebody can close. Deliberately not red-filled — it spends most of its life
+ * disabled, and a filled button at half opacity reads as broken rather than as waiting.
+ */
+.button.danger {
+    -fx-border-color: -bm-warn;
+    -fx-text-fill: -bm-warn;
+}
+
+.button.danger:hover {
+    -fx-border-color: -bm-warn;
+    -fx-background-color: -bm-bg-raised;
+}
+
+/* ── text inputs ─────────────────────────────────────────────────────────── */
+
+.text-field,
+.text-area,
+.combo-box {
+    -fx-background-color: -bm-line, -bm-bg-input;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 4, 3;
+    -fx-text-fill: -bm-text;
+    -fx-highlight-fill: -bm-selection;
+    -fx-highlight-text-fill: -bm-text;
+}
+
+.text-field:focused,
+.text-area:focused,
+.combo-box:focused {
+    -fx-background-color: -bm-accent, -bm-bg-input;
+}
+
+.text-area .content {
+    -fx-background-color: -bm-bg-input;
+}
+
+.text-area .scroll-pane,
+.text-area .scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+
+.combo-box .list-cell {
+    -fx-text-fill: -bm-text;
+    -fx-background-color: transparent;
+}
+
+.combo-box .arrow {
+    -fx-background-color: -bm-text-dim;
+}
+
+.check-box .box {
+    -fx-background-color: -bm-line, -bm-bg-input;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 3, 2;
+}
+
+.check-box:selected .box {
+    -fx-background-color: -bm-accent, -bm-accent;
+}
+
+.check-box:selected .mark {
+    -fx-background-color: -bm-on-accent;
+}
+
+/* ── popups: context menus, combo lists, tooltips ────────────────────────── */
+
+.context-menu,
+.combo-box-popup .list-view {
+    -fx-background-color: -bm-line, -bm-bg-raised;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 4;
+}
+
+.menu-item .label {
+    -fx-text-fill: -bm-text;
+}
+
+.menu-item:focused {
+    -fx-background-color: -bm-selection;
+}
+
+.menu-item:focused .label {
+    -fx-text-fill: -bm-text;
+}
+
+.combo-box-popup .list-view .list-cell {
+    /* A popup is its own scene, so `.root`'s family does not reach it; and `inherit` is not JavaFX CSS for a
+       font (it threw ClassCastException converting -fx-font on every layout). Named, like `.root`. */
+    -fx-font-family: "Inter", "Segoe UI", "Cantarell", sans-serif;
+    -fx-text-fill: -bm-text;
+}
+
+.combo-box-popup .list-view .list-cell:filled:hover,
+.combo-box-popup .list-view .list-cell:selected {
+    -fx-background-color: -bm-selection;
+}
+
+.tooltip {
+    -fx-background-color: -bm-bg-raised;
+    -fx-text-fill: -bm-text;
+    -fx-border-color: -bm-line;
+    -fx-background-radius: 4;
+    -fx-border-radius: 4;
+    -fx-font-size: 12px;
+}
+
+/* ── scroll panes and bars ───────────────────────────────────────────────── */
+
+.scroll-pane,
+.scroll-pane > .viewport {
+    -fx-background-color: -bm-bg;
+}
+
+.scroll-bar {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: -bm-line;
+    -fx-background-radius: 4;
+}
+
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0 2 0 2;
+}
+
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-background-color: -bm-text-dim;
+}
+
+.corner {
+    -fx-background-color: transparent;
+}
+
+/* ── the admin badge ─────────────────────────────────────────────────────── */
+
+/*
+ * Two states and no third. It says what this account may do on the catalog, as its publishers.json answers it —
+ * never what role somebody has been given here.
+ */
+.badge {
+    -fx-padding: 3 9 3 9;
+    -fx-background-radius: 10;
+    -fx-font-size: 11px;
+    -fx-background-color: -bm-bg;
+    -fx-text-fill: -bm-text-dim;
+}
+
+.badge--write {
+    -fx-text-fill: -bm-ok;
+    -fx-border-color: -bm-ok;
+    -fx-border-radius: 10;
+}
+
+.badge--read {
+    -fx-text-fill: -bm-text-dim;
+    -fx-border-color: -bm-line;
+    -fx-border-radius: 10;
+}
+
+/* ── tabs ────────────────────────────────────────────────────────────────── */
+
+.tab-pane .tab-header-background {
+    -fx-background-color: -bm-bg-raised;
+}
+
+.tab-pane .tab {
+    -fx-background-color: transparent;
+    -fx-padding: 6 16 6 16;
+}
+
+.tab-pane .tab:selected {
+    -fx-background-color: -bm-bg;
+    -fx-border-color: transparent transparent -bm-accent transparent;
+    -fx-border-width: 0 0 2 0;
+}
+
+.tab-pane .tab .tab-label {
+    -fx-text-fill: -bm-text-dim;
+}
+
+.tab-pane .tab:selected .tab-label {
+    -fx-text-fill: -bm-text;
+}
+
+.tab-pane > .tab-content-area {
+    -fx-background-color: -bm-bg;
+}
+
+/* ── a tab's own toolbar, and the line under it that says what just happened ─ */
+
+.tab-bar {
+    -fx-alignment: center-left;
+    -fx-background-color: -bm-bg;
+    -fx-border-color: transparent transparent -bm-line transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.status-line {
+    -fx-text-fill: -bm-text-dim;
+}
+
+/* ── tables ──────────────────────────────────────────────────────────────── */
+
+.table-view {
+    -fx-background-color: -bm-bg;
+    -fx-border-color: transparent;
+}
+
+.table-view .column-header-background,
+.table-view .column-header,
+.table-view .filler {
+    -fx-background-color: -bm-bg-raised;
+}
+
+.table-view .column-header .label {
+    -fx-text-fill: -bm-text-dim;
+    -fx-alignment: center-left;
+}
+
+.table-view .placeholder .label {
+    -fx-text-fill: -bm-text-dim;
+}
+
+.table-view .table-row-cell {
+    -fx-background-color: -bm-bg;
+    -fx-border-color: transparent transparent -bm-line transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.table-view .table-row-cell:selected {
+    -fx-background-color: -bm-selection;
+}
+
+.table-view .table-cell {
+    -fx-text-fill: -bm-text;
+    -fx-padding: 6 10 6 10;
+}
+
+/*
+ * Cell states, and none of them is a verdict of this app's own: "releasing" is what the decide pass
+ * decided, "stale" is a pin that is not its upstream's newest tag, and "dim" is everything that is merely
+ * true. Each is also spelled under .table-view .table-cell, because that rule has two classes and a bare
+ * .cell--ok has one — so inside a table the state colour silently lost to the plain text colour.
+ */
+.cell--releasing,
+.table-view .table-cell.cell--releasing {
+    -fx-text-fill: -bm-ok;
+}
+
+.cell--stale,
+.table-view .table-cell.cell--stale {
+    -fx-text-fill: -bm-warn;
+}
+
+.cell--dim,
+.table-view .table-cell.cell--dim {
+    -fx-text-fill: -bm-text-dim;
+}
+
+/*
+ * The release log's own verdicts, coloured by what they mean and never reworded. "n/a" is dim rather than
+ * green: a module that is not a Maven artifact was never asked the JitPack question, which is not the same
+ * as having passed it.
+ */
+.cell--ok,
+.table-view .table-cell.cell--ok {
+    -fx-text-fill: -bm-ok;
+}
+
+.cell--pending,
+.table-view .table-cell.cell--pending {
+    -fx-text-fill: -bm-text-dim;
+}
+
+.cell--broken,
+.table-view .table-cell.cell--broken {
+    -fx-text-fill: -bm-warn;
+}
+
+/* ── link buttons ────────────────────────────────────────────────────────────
+   A row of these sits in a table cell, so they are small, borderless and read as
+   text until hovered: a cell of four bordered buttons looks like four controls
+   competing with the row's own data. The colour is the accent, because every one
+   of them leaves this window. */
+
+.link-bar {
+    -fx-alignment: center-left;
+}
+
+.link-button {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-text-fill: -bm-accent;
+    -fx-font-size: 11px;
+    -fx-padding: 1 5 1 5;
+    -fx-cursor: hand;
+}
+
+/* Small, quiet, and beside the thing it copies — never competing with Execute or Deep check. */
+.copy-button {
+    -fx-font-size: 11px;
+    -fx-padding: 1 8 1 8;
+    -fx-text-fill: -bm-text-dim;
+}
+
+.copy-button:hover {
+    -fx-text-fill: -bm-text;
+    -fx-border-color: -bm-accent;
+}
+
+.link-button:hover {
+    -fx-background-color: -bm-bg-raised;
+    -fx-border-color: transparent;
+    -fx-underline: true;
+}
+
+/* ── the level picker in the Release tab ─────────────────────────────────────
+   Three buttons that read as one control, plus the box for a typed version. The
+   segments are a ToggleGroup rather than a ComboBox because the whole point is
+   that the three levels are visible without opening anything: the arrow beside
+   them changes as they are clicked, which is how "what does minor mean here"
+   gets answered. */
+
+.segmented .segment {
+    -fx-background-color: -bm-bg-raised;
+    -fx-text-fill: -bm-text-dim;
+    -fx-background-radius: 0;
+    -fx-border-color: -bm-line;
+    -fx-border-radius: 0;
+    -fx-border-width: 1 1 1 0;
+    -fx-padding: 3 9 3 9;
+}
+
+.segmented .segment:hover {
+    -fx-text-fill: -bm-text;
+}
+
+.segmented .segment:selected {
+    -fx-background-color: -bm-accent;
+    -fx-text-fill: -bm-on-accent;
+}
+
+/* Only the outer edges are rounded, so the four read as one strip. */
+.segmented .segment:first-child {
+    -fx-background-radius: 4 0 0 4;
+    -fx-border-radius: 4 0 0 4;
+    -fx-border-width: 1;
+}
+
+.segmented .segment:last-child {
+    -fx-background-radius: 0 4 4 0;
+    -fx-border-radius: 0 4 4 0;
+}
+
+.exact-version {
+    -fx-pref-height: 24px;
+    -fx-padding: 1 6 1 6;
+}
+
+.exact-version:disabled {
+    -fx-opacity: 0.4;
+}
+
+/* ── lists, and the error text under a release ───────────────────────────── */
+
+.list-view {
+    -fx-background-color: -bm-bg-raised;
+    -fx-border-color: transparent;
+}
+
+.list-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -bm-text-dim;
+    -fx-font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    -fx-padding: 6 12 6 12;
+}
+
+.list-view .list-cell:selected {
+    -fx-background-color: -bm-bg;
+    -fx-text-fill: -bm-text;
+}
+
+/* The full message Maven or Actions printed — what a reader actually needs six weeks later. */
+.error-text {
+    -fx-font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    -fx-font-size: 12px;
+}
+
+.error-text,
+.error-text .content {
+    -fx-background-color: -bm-bg-raised;
+    -fx-text-fill: -bm-warn;
+}
+
+.split-pane {
+    -fx-background-color: -bm-bg;
+    -fx-padding: 0;
+}
+
+.split-pane .split-pane-divider {
+    -fx-background-color: -bm-line;
+    -fx-padding: 0 1 0 1;
+}
+
+/* ── the Release tab: the flags on the left, the run's own words on the right ─── */
+
+.flag-box {
+    -fx-background-color: -bm-bg-raised;
+    -fx-background-radius: 4;
+    -fx-padding: 10;
+}
+
+/* The exact line this tab will run. Monospace and selectable; read-only rather than disabled, so it can
+   still be copied. */
+.command-line {
+    -fx-font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    -fx-background-color: -bm-bg-raised;
+    -fx-text-fill: -bm-accent;
+    -fx-border-color: -bm-line;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+}
+
+/* The release's output. The text colour is spelled out: without it Modena derived a dark fill from its own
+   defaults, and the plan read black on this dark background. */
+.output-text {
+    -fx-font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: -bm-text;
+}
+
+.output-text,
+.output-text .content {
+    -fx-background-color: -bm-bg-raised;
+}
+
+/*
+ * ── a heading inside a tab ───────────────────────────────────────────────
+ *
+ * Named for the empty tabs it was written for; every one of them is filled now, and what is left is the one
+ * line each tab puts above its detail pane (the release being read, the submission being reviewed). Kept
+ * under the old name rather than renamed in three files for a class that does exactly the same job.
+ */
+.placeholder-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.placeholder-body {
+    -fx-text-fill: -bm-text-dim;
+}
+
+/* ── a refusal, above the output ──────────────────────────────────────────
+   One line per gate, in the gate's words. Red-edged rather than red-filled, so the words stay readable in
+   both themes. */
+
+.refusal-banner {
+    -fx-background-color: -bm-bg-raised;
+    -fx-border-color: -bm-danger;
+    -fx-border-width: 0 0 0 3;
+    -fx-padding: 8 10 8 10;
+}
+
+.refusal-title {
+    -fx-text-fill: -bm-danger;
+    -fx-font-weight: bold;
+}
+
+.refusal-line {
+    -fx-font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    -fx-font-size: 12px;
+}
+
+.output-pane > .title {
+    -fx-background-color: -bm-bg-raised;
+    -fx-border-color: -bm-line;
+}
+
+.output-pane > .title > .text {
+    -fx-fill: -bm-text-dim;
+}
+
+.output-pane > .title > .arrow-button > .arrow {
+    -fx-background-color: -bm-text-dim;
+}
+
+.output-pane > .content {
+    -fx-background-color: -bm-bg;
+    -fx-border-color: transparent;
+}
+
+/* ── a release in progress: tiles, timeline, lanes ────────────────────────── */
+
+.summary-tiles .tile {
+    -fx-background-color: -bm-bg-raised;
+    -fx-background-radius: 6;
+    -fx-border-color: -bm-line;
+    -fx-border-radius: 6;
+    -fx-padding: 8 12 8 10;
+    -fx-cursor: hand;
+}
+
+.summary-tiles .tile--elapsed {
+    -fx-cursor: default;
+}
+
+.summary-tiles .tile--selected {
+    -fx-border-color: -bm-accent;
+}
+
+.tile-number {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+}
+
+.tile-caption {
+    -fx-text-fill: -bm-text-dim;
+    -fx-font-size: 11px;
+}
+
+.tile-arc-track {
+    -fx-stroke: -bm-line;
+    -fx-stroke-width: 3;
+    -fx-fill: transparent;
+}
+
+.tile-arc {
+    -fx-stroke: -bm-ok;
+    -fx-stroke-width: 3;
+    -fx-stroke-line-cap: round;
+    -fx-fill: transparent;
+}
+
+.tile--failed {
+    -fx-border-color: -bm-danger;
+}
+
+.tile--failed .tile-number {
+    -fx-text-fill: -bm-danger;
+}
+
+.tile--failed .tile-arc {
+    -fx-stroke: -bm-danger;
+}
+
+.release-timeline {
+    -fx-background-color: -bm-line;
+    -fx-background-radius: 4;
+}
+
+.timeline-segment {
+    -fx-background-radius: 3;
+}
+
+.timeline-segment--done {
+    -fx-background-color: -bm-ok;
+}
+
+.timeline-segment--running {
+    -fx-background-color: -bm-accent;
+}
+
+.timeline-segment--failed {
+    -fx-background-color: -bm-danger;
+}
+
+.module-lane {
+    -fx-background-color: -bm-bg-raised;
+    -fx-background-radius: 6;
+    -fx-border-color: -bm-line;
+    -fx-border-radius: 6;
+    -fx-padding: 8 12 8 12;
+}
+
+.module-lane--failed {
+    -fx-border-color: -bm-danger;
+}
+
+.lane-module {
+    -fx-font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+}
+
+.tag-chip {
+    -fx-background-color: -bm-bg;
+    -fx-background-radius: 10;
+    -fx-border-color: -bm-line;
+    -fx-border-radius: 10;
+    -fx-padding: 1 8 1 8;
+    -fx-text-fill: -bm-accent;
+    -fx-underline: false;
+}
+
+.lane-stage,
+.lane-elapsed,
+.step-label {
+    -fx-text-fill: -bm-text-dim;
+    -fx-font-size: 11px;
+}
+
+.lane-elapsed {
+    -fx-font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+}
+
+/* A node is a circle drawn by its border; the ring behind it is what pulses while the step runs. */
+.step-node {
+    -fx-background-radius: 9;
+    -fx-border-radius: 9;
+    -fx-border-width: 2;
+    -fx-border-color: -bm-line;
+    -fx-background-color: transparent;
+}
+
+.step-ring {
+    -fx-background-radius: 9;
+    -fx-border-radius: 9;
+    -fx-border-width: 2;
+    -fx-border-color: transparent;
+}
+
+.step-mark {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -bm-on-accent;
+}
+
+.step--running {
+    -fx-border-color: -bm-accent;
+}
+
+.step--running .step-ring {
+    -fx-border-color: -bm-accent;
+}
+
+.step--ok {
+    -fx-border-color: -bm-ok;
+    -fx-background-color: -bm-ok;
+}
+
+.step--failed {
+    -fx-border-color: -bm-danger;
+    -fx-background-color: -bm-danger;
+}
+
+.step--skipped {
+    -fx-border-color: -bm-line;
+    -fx-opacity: 0.6;
+}
+
+.step--skipped .step-mark {
+    -fx-text-fill: -bm-text-dim;
+}
+
+.step-connector {
+    -fx-background-color: -bm-line;
+}
+
+.step-connector--filled {
+    -fx-background-color: -bm-ok;
+}
+
+/* The Releases tab's list: one dot per release. Dim until every verdict is in. */
+.health-dot {
+    -fx-background-radius: 5;
+    -fx-background-color: -bm-line;
+}
+
+.health-dot--ok {
+    -fx-background-color: -bm-ok;
+}
+
+.health-dot--broken {
+    -fx-background-color: -bm-danger;
+}
+
+.health-dot--pending {
+    -fx-background-color: -bm-text-dim;
+}
+
+.live-badge {
+    -fx-text-fill: -bm-accent;
+    -fx-font-size: 11px;
+}
+
+.live-badge--failed {
+    -fx-text-fill: -bm-danger;
+}
+
+/* ── dialogs ─────────────────────────────────────────────────────────────── */
+
+.dialog-pane {
+    -fx-background-color: -bm-bg-raised;
+}
+
+.dialog-pane > .header-panel {
+    -fx-background-color: -bm-bg;
+    -fx-border-color: transparent transparent -bm-line transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.dialog-pane > .header-panel .label,
+.dialog-pane > .content.label,
+.dialog-pane .label {
+    -fx-text-fill: -bm-text;
+}
+
+.dialog-pane > .button-bar > .container {
+    -fx-background-color: -bm-bg-raised;
+}
+
+.device-code {
+    -fx-font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    -fx-font-size: 20px;
+}
+
+/* ── the Catalog tab's grid ──────────────────────────────────────────────────
+   One card per bot, plugin or author (layout A, 2026-10-23), the chips above
+   them, the side panel beside. A rank reads by its badge's colour: Official in
+   the accent, Trusted in ok-green, Community dim. */
+
+.catalog-grid {
+    -fx-background-color: -bm-bg;
+}
+
+.catalog-card {
+    -fx-background-color: -bm-bg-raised;
+    -fx-background-radius: 6;
+    -fx-border-color: -bm-line;
+    -fx-border-radius: 6;
+    -fx-padding: 10 12 10 12;
+    -fx-cursor: hand;
+}
+
+.catalog-card:hover {
+    -fx-border-color: -bm-text-dim;
+}
+
+.catalog-card--selected,
+.catalog-card--selected:hover {
+    -fx-background-color: -bm-selection;
+    -fx-border-color: -bm-accent;
+}
+
+.card-kind {
+    -fx-text-fill: -bm-text-dim;
+    -fx-font-size: 11px;
+}
+
+.card-name {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.card-owner,
+.card-owner:visited {
+    -fx-text-fill: -bm-accent;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+}
+
+.card-meta,
+.card-description {
+    -fx-text-fill: -bm-text-dim;
+    -fx-font-size: 12px;
+}
+
+.rank-badge {
+    -fx-padding: 1 8 1 8;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-font-size: 11px;
+}
+
+.rank--admin {
+    -fx-text-fill: -bm-accent;
+    -fx-border-color: -bm-accent;
+}
+
+.rank--trusted {
+    -fx-text-fill: -bm-ok;
+    -fx-border-color: -bm-ok;
+}
+
+.rank--community {
+    -fx-text-fill: -bm-text-dim;
+    -fx-border-color: -bm-line;
+}
+
+.chip-strip {
+    -fx-spacing: 4;
+}
+
+.toggle-button.chip {
+    -fx-background-color: -bm-bg;
+    -fx-background-radius: 12;
+    -fx-border-color: -bm-line;
+    -fx-border-radius: 12;
+    -fx-padding: 3 10 3 10;
+    -fx-text-fill: -bm-text-dim;
+}
+
+.toggle-button.chip:hover {
+    -fx-text-fill: -bm-text;
+}
+
+.toggle-button.chip:selected {
+    -fx-background-color: -bm-accent;
+    -fx-border-color: -bm-accent;
+    -fx-text-fill: -bm-on-accent;
+}
+
+.catalog-panel {
+    -fx-background-color: -bm-bg-raised;
+}
+
+.panel-section {
+    -fx-text-fill: -bm-text-dim;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 8 0 0 0;
+}

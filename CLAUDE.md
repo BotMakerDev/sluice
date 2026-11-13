@@ -6,7 +6,10 @@ A release tool for a Maven project split over the git submodules of one umbrella
 
 - **Generic.** No main source names BotMaker (`NoBotMakerTest`); BotMaker is one user, through `sluice.yml`.
 - **Modules, one version:** `core/` (`sluice-core`: every package but `cli`) and `cli/` (`sluice-cli`: the command,
-  its shaded `cli/target/sluice-cli-<version>-all.jar`). `core` attaches its test fixtures as a `test-jar`.
+  its shaded `cli/target/sluice-cli-<version>-all.jar`) and `desktop/` (`sluice-desktop`: the JavaFX window, on
+  core only; `DesktopSourcesTest`). `core` attaches its test fixtures as a `test-jar`.
+- **The window decides nothing.** Every answer is a core call the command also makes; a release runs in-process
+  through `Release.run`/`resume` and its `Event`s.
 - **A library first.** `com.botmaker.sluice` prints nothing. Only `cli` writes to a terminal.
 - **Every side effect goes through `Runner`.** A preview echoes it and runs none of it.
 - **Shell to `git` and `mvn`**, never embed them. Versions move only through `versions-maven-plugin`.

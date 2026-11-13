@@ -7,6 +7,18 @@ All notable changes to this project are documented here, in the format of
 
 ### Added
 
+- `desktop` (`sluice-desktop`): a JavaFX window over the library, its shaded jar
+  `desktop/target/sluice-desktop-<version>-all.jar`. A start screen opens an umbrella, a folder with a
+  `sluice.yml`, and keeps the recent ones; then four tabs:
+  - **Modules**: each module's version on the branch, newest tag, CI, its target's build of that tag, and its pins.
+  - **Release**: the command's flags and a request per module; Preview decides and gates, and prints what
+    `sluice` prints; Execute… is armed only by a clean preview of the same flags and asks for a typed word. The run
+    is the library's, in the window's process: a board draws each module's steps as they come, Stop stops it
+    between steps, and Resume… goes on with a run that did not finish.
+  - **Releases**: the runs under `releases/`, each drawn from its state beside its log.
+  - **Changelog**: each module's `CHANGELOG.md` to edit, with the commits since its newest tag; Save, or Save and
+    commit the file alone.
+  The GitHub token is read as the command reads it (`GITHUB_TOKEN`, else `gh auth token`) and never shown.
 - What a program around sluice needs, in `sluice-core`:
   - `ConfigLoader.check(text, label)` gives every problem of a `sluice.yml` at once (`ConfigProblem`: key path,
     message, line), YAML syntax errors included; `parse` still refuses the first one, word for word.

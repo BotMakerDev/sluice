@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.CharacterCodingException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -30,8 +31,8 @@ class NoBotMakerTest {
         try (Stream<Path> modules = Files.list(Path.of(".."))) {
             mains = modules.map(module -> module.resolve("src/main")).filter(Files::isDirectory).toList();
         }
-        assertTrue(mains.contains(Path.of("../core/src/main")) && mains.contains(Path.of("../cli/src/main")),
-                "run from core/, so core and cli are siblings: " + mains);
+        assertTrue(mains.containsAll(List.of(Path.of("../core/src/main"), Path.of("../cli/src/main"),
+                Path.of("../desktop/src/main"))), "run from core/, so core, cli and desktop are siblings: " + mains);
         List<String> hits = new ArrayList<>();
         for (Path main : mains) {
             try (Stream<Path> files = Files.walk(main)) {
@@ -47,6 +48,9 @@ class NoBotMakerTest {
             return IntStream.range(0, lines.size())
                     .filter(i -> PACKAGE.matcher(lines.get(i)).replaceAll("").toLowerCase().contains("botmaker"))
                     .mapToObj(i -> file + ":" + (i + 1) + ": " + lines.get(i).strip());
+        } catch (CharacterCodingException e) {
+            // An image or an icon: no text to name anything in.
+            return Stream.empty();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
