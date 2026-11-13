@@ -86,14 +86,6 @@ public record ChangelogFile(Module module, Path file, String text, Optional<Vers
      * @throws Refusal when git refuses, with its words
      */
     public void commit(String message) {
-        Path dir = module.dir().dir();
-        must(Git.run(dir, "add", "--", Changelog.FILE), "git add");
-        must(Git.run(dir, "commit", "-q", "-m", message, "--", Changelog.FILE), "git commit");
-    }
-
-    private static void must(Proc.Result result, String what) {
-        if (!result.ok()) {
-            throw new Refusal(what + " failed: " + result.out().strip());
-        }
+        GitCommit.alone(module.dir().dir(), Changelog.FILE, message);
     }
 }

@@ -6,6 +6,7 @@ import com.botmaker.sluice.desktop.model.Theme;
 import com.botmaker.sluice.desktop.model.Umbrella;
 import com.botmaker.sluice.desktop.ui.Browse;
 import com.botmaker.sluice.desktop.ui.ChangelogTab;
+import com.botmaker.sluice.desktop.ui.ConfigTab;
 import com.botmaker.sluice.desktop.ui.LazyTab;
 import com.botmaker.sluice.desktop.ui.ModulesTab;
 import com.botmaker.sluice.desktop.ui.ReleaseTab;
@@ -37,7 +38,8 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * The window: a start screen until an umbrella is open, then its Modules, Release, Releases and Changelog tabs.
+ * The window: a start screen until an umbrella is open, then its Modules, Release, Releases, Changelog and Config
+ * tabs.
  * Every answer comes from the library; this decides nothing a terminal's {@code sluice} would not.
  */
 public final class SluiceDesktop extends Application {
@@ -53,6 +55,7 @@ public final class SluiceDesktop extends Application {
     private Stage stage;
     private StartPane start;
     private ReleaseTab release;
+    private LazyTab<ConfigTab> config;
     private boolean closeWhenEnded;
 
     @Override
@@ -94,6 +97,8 @@ public final class SluiceDesktop extends Application {
             if (release != null && release.running()) {
                 e.consume();
                 askToClose();
+            } else if (!configMayGo()) {
+                e.consume();
             }
         });
         stage.show();
@@ -110,6 +115,9 @@ public final class SluiceDesktop extends Application {
     private void showStart() {
         if (release != null && release.running()) {
             message.setText("A release is running: it stays open until it ends.");
+            return;
+        }
+        if (!configMayGo()) {
             return;
         }
         root.setCenter(start);
@@ -136,6 +144,7 @@ public final class SluiceDesktop extends Application {
         release = new ReleaseTab(umbrella, browse);
         LazyTab<ReleasesTab> releases = new LazyTab<>("Releases", () -> new ReleasesTab(umbrella, browse));
         LazyTab<ChangelogTab> changelog = new LazyTab<>("Changelog", () -> new ChangelogTab(umbrella));
+        config = new LazyTab<>("Config", () -> new ConfigTab(umbrella));
         release.setOnEnded(() -> {
             releases.ifBuilt(ReleasesTab::reload);
             if (closeWhenEnded) {
@@ -147,7 +156,7 @@ public final class SluiceDesktop extends Application {
         Tab releaseTab = new Tab("Release", release);
         releaseTab.setGraphic(release.badge());
         releaseTab.selectedProperty().addListener((o, was, is) -> release.setShowing(is));
-        TabPane tabs = new TabPane(modulesTab, releaseTab, releases.tab(), changelog.tab());
+        TabPane tabs = new TabPane(modulesTab, releaseTab, releases.tab(), changelog.tab(), config.tab());
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         tabs.getStyleClass().add("tab-bar");
         release.setShowing(false);
@@ -163,11 +172,21 @@ public final class SluiceDesktop extends Application {
                 "A release is running. Stop it after the step it is on, and close once it has stopped? "
                         + "Resume goes on from there.", ButtonType.CANCEL, ButtonType.OK), stage);
         alert.setHeaderText("Stop the release and close");
-        if (alert.showAndWait().filter(ButtonType.OK::equals).isPresent()) {
+        // The window closes by itself once the run ends, with no close request: the edit is asked about now.
+        if (alert.showAndWait().filter(ButtonType.OK::equals).isPresent() && configMayGo()) {
             closeWhenEnded = true;
             release.stop();
             message.setText("Stopping the release; the window closes when it has.");
         }
+    }
+
+    /** Whether the Config tab has no unsaved edit, or the user lets it go. */
+    private boolean configMayGo() {
+        boolean[] may = {true};
+        if (config != null) {
+            config.ifBuilt(tab -> may[0] = tab.mayDiscard());
+        }
+        return may[0];
     }
 
     private static String themeLabel(Theme theme) {

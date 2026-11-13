@@ -9,7 +9,7 @@ All notable changes to this project are documented here, in the format of
 
 - `desktop` (`sluice-desktop`): a JavaFX window over the library, its shaded jar
   `desktop/target/sluice-desktop-<version>-all.jar`. A start screen opens an umbrella, a folder with a
-  `sluice.yml`, and keeps the recent ones; then four tabs:
+  `sluice.yml`, and keeps the recent ones; then five tabs:
   - **Modules**: each module's version on the branch, newest tag, CI, its target's build of that tag, and its pins.
   - **Release**: the command's flags and a request per module; Preview decides and gates, and prints what
     `sluice` prints; Execute… is armed only by a clean preview of the same flags and asks for a typed word. The run
@@ -18,6 +18,11 @@ All notable changes to this project are documented here, in the format of
   - **Releases**: the runs under `releases/`, each drawn from its state beside its log.
   - **Changelog**: each module's `CHANGELOG.md` to edit, with the commits since its newest tag; Save, or Save and
     commit the file alone.
+  - **Config**: the umbrella's `sluice.yml` by forms (general settings, modules, edges, gates, steps, after-release
+    properties, text pins) or as YAML, one document both edit, so a form's edit changes only its lines and every
+    comment stays. Beside it, the tag order and each module's edges as the library builds them from the edited
+    text; under it, every problem the loader and the graph find, a click from its line. Save is refused while one
+    remains; it writes the file, shows the diff and offers to commit it alone.
   The GitHub token is read as the command reads it (`GITHUB_TOKEN`, else `gh auth token`) and never shown.
 - What a program around sluice needs, in `sluice-core`:
   - `ConfigLoader.check(text, label)` gives every problem of a `sluice.yml` at once (`ConfigProblem`: key path,

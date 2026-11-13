@@ -972,3 +972,29 @@
     -fx-font-weight: bold;
     -fx-padding: 8 0 0 0;
 }
+
+/* ── the Config tab ─────────────────────────────────────────────────────── */
+
+.config-sections {
+    -fx-background-color: -bm-bg-raised;
+}
+
+.config-form,
+.config-section {
+    -fx-background-color: -bm-bg;
+}
+
+/* One module of the tag order: its place and name, then its edges in dim text. */
+.graph-row {
+    -fx-padding: 4 0 6 0;
+    -fx-border-color: transparent transparent -bm-line transparent;
+}
+
+.graph-module {
+    -fx-font-weight: bold;
+}
+
+/* A dependency sluice.yml adds, apart from the poms'. */
+.graph-added {
+    -fx-text-fill: -bm-warn;
+}
