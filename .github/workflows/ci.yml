@@ -27,7 +27,8 @@ jobs:
       - name: Test
         run: mvn -B verify
 
-  # On a tag: the jar, an rpm and a deb, each package with its own runtime cut by jlink.
+  # On a tag: the command's jar, and the rpm and the deb of sluice and of sluice-desktop, each package with its own
+  # runtime cut by jlink (packaging/linux/build-packages.sh).
   linux-packages:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: test
@@ -39,25 +40,12 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Build the jar
-        shell: bash
-        run: |
-          mvn -B package -DskipTests
-          # The cli module builds the command; the packages take it from the root's target/.
-          mkdir -p target
-          mv cli/target/sluice-cli-*-all.jar target/sluice-all.jar
-          java -jar target/sluice-all.jar --version
-      - name: Cut the runtime
-        shell: bash
-        run: |
-          # jdeps sees what the classes name; jdk.charsets is what a non-UTF-8 locale loads by lookup alone.
-          modules=$(jdeps --print-module-deps --ignore-missing-deps --multi-release 25 target/sluice-all.jar)
-          jlink --add-modules "$modules,jdk.charsets" --strip-debug --no-header-files --no-man-pages \
-            --output target/runtime
-          target/runtime/bin/java -jar target/sluice-all.jar --version
-      # The rpm is signed, for dnf's gpgcheck (packaging/nfpm.yaml); GPG_PRIVATE_KEY is base64 of the armored
+      # On Linux, so the window's jar carries JavaFX's Linux natives.
+      - name: Build the jars
+        run: mvn -B package -DskipTests
+      # The rpms are signed, for dnf's gpgcheck (packaging/nfpm*.yaml); GPG_PRIVATE_KEY is base64 of the armored
       # private key, what nfpm's key_file reads once decoded. Without the secret the job fails.
-      - name: Build the rpm and the deb
+      - name: Build the packages
         shell: bash
         env:
           NFPM_VERSION: '2.43.0'
@@ -67,7 +55,7 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/nfpm.tar.gz" \
             "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
           tar -xzf "$RUNNER_TEMP/nfpm.tar.gz" -C "$RUNNER_TEMP" nfpm
-          export SLUICE_VERSION="${GITHUB_REF_NAME#v}"
+          export NFPM="$RUNNER_TEMP/nfpm"
           export NFPM_RPM_KEY_FILE=""
           if [ -n "$GPG_PRIVATE_KEY" ]; then
             NFPM_RPM_KEY_FILE="$RUNNER_TEMP/signing.asc"
@@ -79,15 +67,17 @@ jobs:
             echo "::error::GPG_PRIVATE_KEY is unset: a tag's rpm is signed."
             exit 1
           fi
-          "$RUNNER_TEMP/nfpm" package -f packaging/nfpm.yaml -p rpm -t target/sluice.rpm
-          "$RUNNER_TEMP/nfpm" package -f packaging/nfpm.yaml -p deb -t target/sluice.deb
+          bash packaging/linux/build-packages.sh "${GITHUB_REF_NAME#v}"
       - uses: actions/upload-artifact@v4
         with:
           name: linux
           path: |
             target/sluice-all.jar
+            target/sluice-desktop-all.jar
             target/sluice.rpm
             target/sluice.deb
+            target/sluice-desktop.rpm
+            target/sluice-desktop.deb
           if-no-files-found: error
 
   # On a tag: an MSI, and the same application image zipped with its scoop manifest.

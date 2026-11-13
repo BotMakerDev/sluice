@@ -2,6 +2,7 @@
 # sluice: one-command install on Fedora/RHEL (dnf) and Debian/Ubuntu (apt), x86_64.
 #
 #   curl -fsSL https://botmakerdev.github.io/sluice/install.sh | sudo bash
+#   curl -fsSL https://botmakerdev.github.io/sluice/install.sh | sudo bash -s -- --desktop    # and the window
 #
 # It does what the landing page says to do by hand: register the signed package repository on this repository's
 # GitHub Pages and install from it. It is short and plain on purpose, because it is piped into a root shell.
@@ -30,6 +31,16 @@ fetch_key() {
 }
 
 main() {
+  # sluice always; --desktop adds the window, sluice-desktop, from the same repository.
+  local packages=(sluice)
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --desktop) packages+=(sluice-desktop) ;;
+      *) die "unknown option $1: the one option is --desktop, which installs the window too" ;;
+    esac
+    shift
+  done
+
   [ "$(id -u)" = "0" ] || die "run as root: pipe into 'sudo bash', or 'sudo $0'"
 
   command -v curl >/dev/null 2>&1 || die "curl is required (install it, or download a package from $RELEASES_URL)"
@@ -59,7 +70,7 @@ main() {
       "$BASE_URL" > /etc/yum.repos.d/sluice.repo
 
     info "Installing"
-    "$pm" install -y sluice </dev/null
+    "$pm" install -y "${packages[@]}" </dev/null
 
   elif command -v apt-get >/dev/null 2>&1; then
     info "Registering the sluice repository for apt"
@@ -82,7 +93,7 @@ main() {
 
     info "Installing"
     apt-get update </dev/null
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades sluice </dev/null
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades "${packages[@]}" </dev/null
 
   else
     die "no supported package manager found (dnf, yum or apt-get).
@@ -90,6 +101,9 @@ With Java 25, sluice-all.jar runs anywhere: $RELEASES_URL"
   fi
 
   info "Done: $(sluice --version </dev/null)"
+  case " ${packages[*]} " in
+    *" sluice-desktop "*) info "The window: sluice-desktop, or sluice in the desktop's menu" ;;
+  esac
   info "Updates arrive with the rest of the system; re-running this script works too."
 }
 

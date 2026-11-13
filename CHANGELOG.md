@@ -24,6 +24,14 @@ All notable changes to this project are documented here, in the format of
     text; under it, every problem the loader and the graph find, a click from its line. Save is refused while one
     remains; it writes the file, shows the diff and offers to commit it alone.
   The GitHub token is read as the command reads it (`GITHUB_TOKEN`, else `gh auth token`) and never shown.
+- `sluice-desktop` packages: a tag builds an rpm and a deb of the window beside the command's, each with its own
+  Java runtime and JavaFX inside, a menu entry and its icon; the rpm is signed like `sluice`'s. Both go into the
+  signed dnf and apt repositories, and `install.sh --desktop` installs the window with the command
+  (`curl -fsSL https://botmakerdev.github.io/sluice/install.sh | sudo bash -s -- --desktop`). The release also
+  carries `sluice-desktop-all.jar`, for Linux x86_64 with Java 25 (its JavaFX natives are Linux's).
+  `packaging/linux/build-packages.sh` builds all four packages, in CI and locally; `packaging/linux/check-packages.sh`
+  installs them from a locally served signed site in Fedora and Debian containers and saves the window's screen
+  under Xvfb.
 - What a program around sluice needs, in `sluice-core`:
   - `ConfigLoader.check(text, label)` gives every problem of a `sluice.yml` at once (`ConfigProblem`: key path,
     message, line), YAML syntax errors included; `parse` still refuses the first one, word for word.

@@ -1,0 +1,22 @@
+#!/bin/sh
+# The sluice window, as the sluice-desktop rpm and deb install it at /usr/bin/sluice-desktop; the menu entry
+# (sluice-desktop.desktop) starts this.
+#
+# The package carries its own Java runtime (jlink, at /usr/lib/sluice-desktop/runtime) and the window's jar with
+# JavaFX inside, so a machine needs only git, mvn and a desktop's GTK. An argument is the umbrella to open, as
+# `sluice-desktop ~/src/umbrella`; with none, the window opens on the last one.
+#
+# SLUICE_DESKTOP_JAVA_OPTS is a list of arguments, so it is left unquoted on purpose.
+set -eu
+
+HOME_DIR=/usr/lib/sluice-desktop
+JAVA="$HOME_DIR/runtime/bin/java"
+
+if [ ! -x "$JAVA" ]; then
+    echo "sluice-desktop: $JAVA is missing: the package is installed, its runtime is not." >&2
+    exit 1
+fi
+
+# shellcheck disable=SC2086
+exec "$JAVA" --enable-native-access=ALL-UNNAMED ${SLUICE_DESKTOP_JAVA_OPTS:-} \
+    -jar "$HOME_DIR/sluice-desktop-all.jar" "$@"

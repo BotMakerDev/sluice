@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=sluice
+GenericName=Release tool
+Comment=Release a Maven project split over the git submodules of one umbrella
+Exec=sluice-desktop %f
+Icon=sluice-desktop
+Terminal=false
+Categories=Development;
+Keywords=release;maven;git;submodule;

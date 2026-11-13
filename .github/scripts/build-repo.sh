@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds the signed dnf and apt repositories published to this repository's GitHub Pages, out of the .rpm and the
-# .deb the tag's CI just built. A user then installs with `curl -fsSL <pages>/install.sh | sudo bash`, or with the
+# Builds the signed dnf and apt repositories published to this repository's GitHub Pages, out of the rpms and debs
+# of sluice and sluice-desktop the tag's CI just built. A user then installs with `curl -fsSL <pages>/install.sh | sudo bash`, or with the
 # snippets on the landing page, and every later version arrives with the rest of the system's updates.
 #
 #   build-repo.sh <artifacts-dir> <site-dir> <tag>
@@ -12,7 +12,8 @@
 # the GitHub Releases, and each deploy is a fresh Pages artifact.
 #
 # SIGNING: repodata/repomd.xml.asc for dnf, a clearsigned InRelease and a detached Release.gpg for apt. dnf also
-# checks the rpm's own header (`gpgcheck`), which the CI's release job signs (packaging/nfpm.yaml). Unsigned (no
+# checks each rpm's own header (`gpgcheck`), which CI signs as it builds them (packaging/linux/build-packages.sh, through
+# packaging/nfpm.yaml and packaging/nfpm-desktop.yaml). Unsigned (no
 # key: a dry run, a fork) the repositories are still built and the generated snippets turn the checks off, so what
 # is published agrees with itself; that path is for trying the script, not for a release.
 set -euo pipefail
@@ -25,13 +26,14 @@ REPO_SLUG="${GITHUB_REPOSITORY:-BotMakerDev/sluice}"
 # Pages serves <owner>.github.io/<repo>, lowercased. PAGES_URL overrides it for a site served locally.
 PAGES_URL="${PAGES_URL:-https://$(echo "${REPO_SLUG%%/*}" | tr '[:upper:]' '[:lower:]').github.io/${REPO_SLUG##*/}}"
 
-shopt -s nullglob
-rpms=("${ARTIFACTS}"/*.rpm)
-debs=("${ARTIFACTS}"/*.deb)
-[ ${#rpms[@]} -gt 0 ] || { echo "::error::no .rpm found in ${ARTIFACTS}"; exit 1; }
-[ ${#debs[@]} -gt 0 ] || { echo "::error::no .deb found in ${ARTIFACTS}"; exit 1; }
-RPM="${rpms[0]}"
-DEB="${debs[0]}"
+# Both packages of the version, each an rpm and a deb, named as packaging/linux/build-packages.sh writes them: the
+# command and the window go out together or not at all.
+PACKAGES=(sluice sluice-desktop)
+for package in "${PACKAGES[@]}"; do
+  for kind in rpm deb; do
+    [ -f "${ARTIFACTS}/${package}.${kind}" ] || { echo "::error::no ${package}.${kind} in ${ARTIFACTS}"; exit 1; }
+  done
+done
 
 SIGNING=0
 if [ "${SLUICE_SIGN:-0}" = "1" ] && [ -n "${GPG_KEY_ID:-}" ]; then
@@ -49,13 +51,15 @@ gpg_run() {
   gpg --batch --yes --pinentry-mode loopback --passphrase "${GPG_PASSPHRASE:-}" -u "${GPG_KEY_ID}" "$@"
 }
 
-mkdir -p "${SITE}/rpm" "${SITE}/deb/pool/main/s/sluice"
 # Each package under a name of its version: a fixed one would be a URL whose bytes change from release to release,
 # and right after a deploy the Pages cache could serve the old package under the new index's checksum.
 VERSION="${TAG#v}"
 
 # --- dnf ---------------------------------------------------------------------------------------------------------
-cp "${RPM}" "${SITE}/rpm/sluice-${VERSION}.x86_64.rpm"
+mkdir -p "${SITE}/rpm"
+for package in "${PACKAGES[@]}"; do
+  cp "${ARTIFACTS}/${package}.rpm" "${SITE}/rpm/${package}-${VERSION}.x86_64.rpm"
+done
 # --general-compress-type, not --compress-type: the latter leaves primary.xml on the default. gz: every dnf reads it.
 createrepo_c --general-compress-type gz "${SITE}/rpm"
 if [ "${SIGNING}" = "1" ]; then
@@ -63,9 +67,12 @@ if [ "${SIGNING}" = "1" ]; then
 fi
 
 # --- apt ---------------------------------------------------------------------------------------------------------
-# The package carries an x86_64 runtime, so it is amd64's alone, and install.sh's sources line says [arch=amd64].
+# Each package carries an x86_64 runtime, so it is amd64's alone, and install.sh's sources line says [arch=amd64].
 mkdir -p "${SITE}/deb/dists/stable/main/binary-amd64"
-cp "${DEB}" "${SITE}/deb/pool/main/s/sluice/sluice_${VERSION}_amd64.deb"
+for package in "${PACKAGES[@]}"; do
+  mkdir -p "${SITE}/deb/pool/main/s/${package}"
+  cp "${ARTIFACTS}/${package}.deb" "${SITE}/deb/pool/main/s/${package}/${package}_${VERSION}_amd64.deb"
+done
 (
   cd "${SITE}/deb"
   # Origin BotMakerDev below is what install.sh's apt pin names (Debian's own `sluice` is another program).
@@ -124,6 +131,7 @@ fi
 install -m 755 "${INSTALLER}" "${SITE}/install.sh"
 
 ONELINER="curl -fsSL ${PAGES_URL}/install.sh | sudo bash"
+DESKTOP_ONELINER="curl -fsSL ${PAGES_URL}/install.sh | sudo bash -s -- --desktop"
 
 DNF_SNIPPET="sudo curl -fsSL -o /etc/yum.repos.d/sluice.repo ${PAGES_URL}/sluice.repo
 sudo dnf install sluice"
@@ -155,6 +163,12 @@ repositories for <strong>${TAG}</strong>: install once, then update with the res
 <p>Fedora, RHEL and Debian, Ubuntu, x86_64. <a href="install.sh">Read it first</a> if you would rather see what
 you pipe into a root shell; it registers the repository below and installs from it, and re-running it is safe.</p>
 
+<h2>The window too</h2>
+<pre><code>${DESKTOP_ONELINER}</code></pre>
+<p><code>sluice-desktop</code> is the same releases in a window: each module's state, a release previewed and
+cut, the releases it had, the changelogs and <code>sluice.yml</code>. By hand, install the package
+<code>sluice-desktop</code> from the same repository.</p>
+
 <h2>Fedora / RHEL, by hand</h2>
 <pre><code>${DNF_SNIPPET}</code></pre>
 
@@ -167,8 +181,8 @@ you pipe into a root shell; it registers the repository below and installs from 
 <a href="https://github.com/${REPO_SLUG}/releases">Releases</a> page.</p>
 
 <footer>
-<p>The package carries its own Java runtime at <code>/usr/lib/sluice/</code> and requires git and Maven, which
-a release runs.</p>
+<p>Each package carries its own Java runtime, at <code>/usr/lib/sluice/</code> and
+<code>/usr/lib/sluice-desktop/</code>, and requires git and Maven, which a release runs.</p>
 <p>This repository carries the <strong>latest release only</strong>: it is an upgrade channel, not an
 archive.</p>
 </footer>

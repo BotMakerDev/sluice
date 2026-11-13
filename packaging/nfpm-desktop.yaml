@@ -1,0 +1,79 @@
+# The window's two packages: sluice-desktop.rpm and sluice-desktop.deb, built by CI on a tag beside sluice's own
+# (packaging/linux/build-packages.sh), at the same version.
+#
+# Each carries its own Java runtime, cut by jlink (target/desktop-runtime), and the window's shaded jar, JavaFX and
+# its Linux natives inside, so installing it needs no JDK and no JavaFX: git and mvn, which a release runs, and the
+# GTK stack JavaFX draws with. That makes the package one architecture's.
+#
+# It does not need the sluice package: the window runs a release in its own process, through the library.
+
+name: sluice-desktop
+arch: amd64
+platform: linux
+version: ${SLUICE_VERSION}
+version_schema: semver
+section: devel
+priority: optional
+maintainer: BotMakerDev <noreply@github.com>
+description: |
+  A window onto a Maven project split over the git submodules of one umbrella: each module's tag, CI, build and
+  pins; a release previewed, cut, stopped and resumed; the releases it had; each module's changelog; and its
+  sluice.yml, by forms or as YAML.
+vendor: BotMakerDev
+homepage: https://github.com/BotMakerDev/sluice
+license: Apache-2.0
+
+contents:
+  - src: target/sluice-desktop-all.jar
+    dst: /usr/lib/sluice-desktop/sluice-desktop-all.jar
+
+  - src: target/desktop-runtime
+    dst: /usr/lib/sluice-desktop/runtime
+    type: tree
+
+  - src: packaging/sluice-desktop
+    dst: /usr/bin/sluice-desktop
+    file_info:
+      mode: 0755
+
+  # The menu entry and its icon, under the name the entry's Icon= gives.
+  - src: packaging/linux/sluice-desktop.desktop
+    dst: /usr/share/applications/sluice-desktop.desktop
+  - src: desktop/src/main/resources/icons/icon-256.png
+    dst: /usr/share/icons/hicolor/256x256/apps/sluice-desktop.png
+  - src: desktop/src/main/resources/icons/icon-64.png
+    dst: /usr/share/icons/hicolor/64x64/apps/sluice-desktop.png
+  - src: desktop/src/main/resources/icons/icon.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/sluice-desktop.svg
+
+  - src: README.md
+    dst: /usr/share/doc/sluice-desktop/README.md
+  - src: LICENSE
+    dst: /usr/share/doc/sluice-desktop/LICENSE
+
+# Signed as sluice's rpm is (packaging/nfpm.yaml): the site's dnf repository has gpgcheck=1.
+rpm:
+  signature:
+    key_file: ${NFPM_RPM_KEY_FILE}
+
+# git and mvn, which a release runs, and what JavaFX loads by name at start: nothing in the package's own files links
+# GTK, so no tool would find these by itself.
+overrides:
+  rpm:
+    depends:
+      - git
+      - maven
+      - gtk3
+      - libXtst
+      - libXxf86vm
+      - mesa-libGL
+      - fontconfig
+  deb:
+    depends:
+      - git
+      - maven
+      - libgtk-3-0t64 | libgtk-3-0
+      - libxtst6
+      - libxxf86vm1
+      - libgl1
+      - libfontconfig1
