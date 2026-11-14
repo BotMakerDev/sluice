@@ -1,0 +1,7 @@
+--name sluice-desktop
+--vendor BotMakerDev
+--description "The sluice window: releases a Maven umbrella split over git submodules."
+--main-jar sluice-desktop-all.jar
+--main-class com.botmaker.sluice.desktop.Launcher
+--icon desktop/src/main/resources/icons/icon.ico
+--java-options --enable-native-access=ALL-UNNAMED

@@ -3,6 +3,13 @@
 All notable changes to this project are documented here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `sluice-desktop.msi`: the window for Windows, on each tag's release beside `sluice.msi`. It carries its own Java
+  runtime, cut as the Linux packages' is, and adds a Start menu entry (`packaging/windows/jpackage-desktop.txt`).
+
 ## [0.2.1] — 2026-11-13
 
 ### Added

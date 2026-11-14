@@ -176,7 +176,8 @@ cut, the releases it had, the changelogs and <code>sluice.yml</code>. By hand, i
 <pre><code>${APT_SNIPPET}</code></pre>
 
 <h2>Anywhere else</h2>
-<p>Windows: the MSI, or <code>sluice-windows.zip</code> with its scoop manifest. Any OS with Java 25:
+<p>Windows: the MSI, or <code>sluice-windows.zip</code> with its scoop manifest; the window is
+<code>sluice-desktop.msi</code>. Any OS with Java 25:
 <code>java -jar sluice-all.jar</code>. All on the
 <a href="https://github.com/${REPO_SLUG}/releases">Releases</a> page.</p>
 
