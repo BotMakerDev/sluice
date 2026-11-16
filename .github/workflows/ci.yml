@@ -143,6 +143,9 @@ jobs:
   # Every package on the tag's GitHub release. sluice may have created the release page already, with the
   # changelog's notes; otherwise it is created here, and sluice's own attempt then only says it exists.
   attach:
+    # A job after a skipped one (the tests, without TEST_TAGS) is skipped too unless its if says otherwise, as this
+    # one's and pages' do: v0.2.2's run built both packages and attached neither.
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && !failure() && !cancelled() }}
     needs: [linux-packages, windows-packages]
     runs-on: ubuntu-latest
     permissions:
@@ -166,7 +169,7 @@ jobs:
   # "GitHub Actions" (Settings ▸ Pages), and the github-pages environment allows tags `v*` besides `main`
   # (Settings ▸ Environments); without either, deploy-pages fails.
   pages:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && !failure() && !cancelled() }}
     needs: attach
     runs-on: ubuntu-latest
     # Job-level permissions replace the workflow's; deploy-pages needs id-token for its OIDC handshake.

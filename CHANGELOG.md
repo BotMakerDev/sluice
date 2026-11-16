@@ -3,6 +3,13 @@
 All notable changes to this project are documented here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- A tag's packages are attached to its release and published to the package repositories again: with the tests
+  skipped on a tag, `attach` and `pages` were skipped after them, so v0.2.2's release got no packages.
+
 ## [0.2.2] — 2026-11-16
 
 ### Changed
