@@ -7,7 +7,12 @@ on:
   pull_request:
 
 jobs:
+  # Every module's tests, on main and pull requests. Not on a tag by default: a release tags a commit whose main run
+  # sluice's ci gate already found green, so the tag's run would repeat it. The repository variable
+  # TEST_TAGS=true runs them on a tag too.
   test:
+    name: build and test (${{ matrix.os }})
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') || vars.TEST_TAGS == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -30,7 +35,8 @@ jobs:
   # On a tag: the command's and the window's jars, and sluice's rpm and deb, each carrying both on one runtime cut by
   # jlink (packaging/linux/build-packages.sh).
   linux-packages:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # After the tests when they ran (TEST_TAGS), else at once; never after a failed or cancelled run.
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && !failure() && !cancelled() }}
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -82,7 +88,7 @@ jobs:
   # scoop manifest. sluice.exe and sluice-desktop.exe are two launchers of one image on one runtime
   # (packaging/windows/jpackage.txt); the window's jar is built here, so it carries JavaFX's Windows natives.
   windows-packages:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && !failure() && !cancelled() }}
     needs: test
     runs-on: windows-latest
     steps:

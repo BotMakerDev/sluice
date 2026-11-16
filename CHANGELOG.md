@@ -14,6 +14,8 @@ All notable changes to this project are documented here, in the format of
   for the window, and replaces the `sluice-desktop` package of 0.2.1, which the repositories no longer carry;
   `install.sh --desktop` is still accepted and changes nothing. The release's `sluice-desktop-all.jar` stays, for
   Linux x86_64 with Java 25.
+- CI's test job is named *build and test*, and a tag's run no longer repeats the tests `main` already passed: the
+  packages build at once. The repository variable `TEST_TAGS=true` runs them on a tag again, before the packages.
 
 ## [0.2.1] — 2026-11-13
 
