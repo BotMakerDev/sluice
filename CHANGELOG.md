@@ -7,6 +7,9 @@ All notable changes to this project are documented here, in the format of
 
 ### Changed
 
+- Every file states its license and copyright by REUSE (`REUSE.toml`, `LICENSES/`), every Java source starts with
+  its SPDX header, and the `reuse` workflow checks both on each push. `desktop/THIRD-PARTY.txt` lists the licenses
+  of the libraries sluice-desktop ships.
 - Licensed under PolyForm Noncommercial 1.0.0, copyright LiQiyeDev: free for any noncommercial use, commercial use
   needs a license from LiQiyeDev. Releases up to v0.3.0 stay Apache-2.0.
 

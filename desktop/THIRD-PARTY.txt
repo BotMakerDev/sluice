@@ -1,0 +1,6 @@
+
+Lists of 4 third-party dependencies.
+     (GPLv2+CE) javafx base (org.openjfx:javafx-base:27 - https://openjdk.java.net/projects/openjfx/)
+     (GPLv2+CE) javafx controls (org.openjfx:javafx-controls:27 - https://openjdk.java.net/projects/openjfx/)
+     (GPLv2+CE) javafx graphics (org.openjfx:javafx-graphics:27 - https://openjdk.java.net/projects/openjfx/)
+     (Apache License, Version 2.0) SnakeYAML Engine (org.snakeyaml:snakeyaml-engine:2.9 - https://bitbucket.org/snakeyaml/snakeyaml-engine)

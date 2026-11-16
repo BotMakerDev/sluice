@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 LiQiyeDev
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
 package com.botmaker.sluice.execute;
 
 /** How far one module's release has gone, in order. The state file records it after every step. */
