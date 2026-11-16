@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds the signed dnf and apt repositories published to this repository's GitHub Pages, out of the rpms and debs
-# of sluice and sluice-desktop the tag's CI just built. A user then installs with `curl -fsSL <pages>/install.sh | sudo bash`, or with the
+# Builds the signed dnf and apt repositories published to this repository's GitHub Pages, out of sluice's rpm and deb
+# the tag's CI just built, the command and the window in each. A user then installs with `curl -fsSL <pages>/install.sh | sudo bash`, or with the
 # snippets on the landing page, and every later version arrives with the rest of the system's updates.
 #
 #   build-repo.sh <artifacts-dir> <site-dir> <tag>
@@ -13,7 +13,7 @@
 #
 # SIGNING: repodata/repomd.xml.asc for dnf, a clearsigned InRelease and a detached Release.gpg for apt. dnf also
 # checks each rpm's own header (`gpgcheck`), which CI signs as it builds them (packaging/linux/build-packages.sh, through
-# packaging/nfpm.yaml and packaging/nfpm-desktop.yaml). Unsigned (no
+# packaging/nfpm.yaml). Unsigned (no
 # key: a dry run, a fork) the repositories are still built and the generated snippets turn the checks off, so what
 # is published agrees with itself; that path is for trying the script, not for a release.
 set -euo pipefail
@@ -26,9 +26,10 @@ REPO_SLUG="${GITHUB_REPOSITORY:-BotMakerDev/sluice}"
 # Pages serves <owner>.github.io/<repo>, lowercased. PAGES_URL overrides it for a site served locally.
 PAGES_URL="${PAGES_URL:-https://$(echo "${REPO_SLUG%%/*}" | tr '[:upper:]' '[:lower:]').github.io/${REPO_SLUG##*/}}"
 
-# Both packages of the version, each an rpm and a deb, named as packaging/linux/build-packages.sh writes them: the
-# command and the window go out together or not at all.
-PACKAGES=(sluice sluice-desktop)
+# The version's package, an rpm and a deb, named as packaging/linux/build-packages.sh writes them. Until 0.2.2 the
+# window was a package of its own, sluice-desktop; sluice replaces it, so only the latest release's index lists it no
+# more.
+PACKAGES=(sluice)
 for package in "${PACKAGES[@]}"; do
   for kind in rpm deb; do
     [ -f "${ARTIFACTS}/${package}.${kind}" ] || { echo "::error::no ${package}.${kind} in ${ARTIFACTS}"; exit 1; }
@@ -131,7 +132,6 @@ fi
 install -m 755 "${INSTALLER}" "${SITE}/install.sh"
 
 ONELINER="curl -fsSL ${PAGES_URL}/install.sh | sudo bash"
-DESKTOP_ONELINER="curl -fsSL ${PAGES_URL}/install.sh | sudo bash -s -- --desktop"
 
 DNF_SNIPPET="sudo curl -fsSL -o /etc/yum.repos.d/sluice.repo ${PAGES_URL}/sluice.repo
 sudo dnf install sluice"
@@ -163,11 +163,10 @@ repositories for <strong>${TAG}</strong>: install once, then update with the res
 <p>Fedora, RHEL and Debian, Ubuntu, x86_64. <a href="install.sh">Read it first</a> if you would rather see what
 you pipe into a root shell; it registers the repository below and installs from it, and re-running it is safe.</p>
 
-<h2>The window too</h2>
-<pre><code>${DESKTOP_ONELINER}</code></pre>
-<p><code>sluice-desktop</code> is the same releases in a window: each module's state, a release previewed and
-cut, the releases it had, the changelogs and <code>sluice.yml</code>. By hand, install the package
-<code>sluice-desktop</code> from the same repository.</p>
+<h2>The window</h2>
+<p>The same package has it: <code>sluice-desktop</code>, or sluice in the desktop's menu, is the same releases in
+a window: each module's state, a release previewed and cut, the releases it had, the changelogs and
+<code>sluice.yml</code>.</p>
 
 <h2>Fedora / RHEL, by hand</h2>
 <pre><code>${DNF_SNIPPET}</code></pre>
@@ -176,14 +175,14 @@ cut, the releases it had, the changelogs and <code>sluice.yml</code>. By hand, i
 <pre><code>${APT_SNIPPET}</code></pre>
 
 <h2>Anywhere else</h2>
-<p>Windows: the MSI, or <code>sluice-windows.zip</code> with its scoop manifest; the window is
-<code>sluice-desktop.msi</code>. Any OS with Java 25:
+<p>Windows: <code>sluice.msi</code>, the command and the window with its Start menu entry, or
+<code>sluice-windows.zip</code> with its scoop manifest. Any OS with Java 25:
 <code>java -jar sluice-all.jar</code>. All on the
 <a href="https://github.com/${REPO_SLUG}/releases">Releases</a> page.</p>
 
 <footer>
-<p>Each package carries its own Java runtime, at <code>/usr/lib/sluice/</code> and
-<code>/usr/lib/sluice-desktop/</code>, and requires git and Maven, which a release runs.</p>
+<p>The package carries its own Java runtime, at <code>/usr/lib/sluice/</code>, and requires git and Maven,
+which a release runs, and GTK for the window.</p>
 <p>This repository carries the <strong>latest release only</strong>: it is an upgrade channel, not an
 archive.</p>
 </footer>

@@ -1,6 +1,6 @@
 {
     "version": "${VERSION}",
-    "description": "Releases a Maven project split over the git submodules of one umbrella repository.",
+    "description": "Releases a Maven project split over the git submodules of one umbrella repository: the sluice command and its window.",
     "homepage": "https://github.com/BotMakerDev/sluice",
     "license": "Apache-2.0",
     "depends": ["git", "maven"],
@@ -12,6 +12,7 @@
     },
     "extract_dir": "sluice",
     "bin": "sluice.exe",
+    "shortcuts": [["sluice-desktop.exe", "sluice"]],
     "checkver": "github",
     "autoupdate": {
         "architecture": {

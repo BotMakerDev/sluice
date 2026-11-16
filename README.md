@@ -34,8 +34,11 @@ same steps by hand) and installs from it; later versions come with the system's 
 own Java runtime and needs git and Maven. Debian and Ubuntu ship an unrelated `sluice`; the installer pins this
 repository so its package wins, and replaces that one if it is installed.
 
-Windows: the MSI, or `sluice-windows.zip` with its scoop manifest; the window is `sluice-desktop.msi`. Anywhere with Java 25: `java -jar
+Windows: `sluice.msi`, or `sluice-windows.zip` with its scoop manifest. Anywhere with Java 25: `java -jar
 sluice-all.jar`. All are on the [Releases](https://github.com/BotMakerDev/sluice/releases) page.
+
+Every install holds both the command, `sluice`, and the same releases in a window, `sluice-desktop` (sluice in the
+desktop's menu or the Start menu).
 
 ## Licence
 

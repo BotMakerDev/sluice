@@ -1,7 +1,11 @@
 # One description, two packages: sluice.rpm and sluice.deb, built by CI on a tag (.github/workflows/ci.yml).
 #
-# Each carries its own Java runtime, cut by jlink to the modules the jar uses (target/runtime), so installing it
-# needs no JDK: only git and mvn, which sluice shells out to. That makes the package one architecture's.
+# One install holds both the command (/usr/bin/sluice) and the window (/usr/bin/sluice-desktop, and its menu entry),
+# on one Java runtime cut by jlink to the modules both jars use (target/runtime); the window's jar carries JavaFX and
+# its Linux natives. Installing it needs no JDK and no JavaFX: git and mvn, which sluice shells out to, and the GTK
+# stack JavaFX draws with. That makes the package one architecture's.
+#
+# Until 0.2.2 the window was a package of its own, sluice-desktop; this one replaces it.
 #
 # The version comes from the environment, which the workflow sets from the tag that triggered it.
 
@@ -15,14 +19,23 @@ priority: optional
 maintainer: BotMakerDev <noreply@github.com>
 description: |
   Releases a Maven project split over the git submodules of one umbrella repository: each module tagged in
-  dependency order, its dependents' pins moved to it, and every module back on its next snapshot.
+  dependency order, its dependents' pins moved to it, and every module back on its next snapshot. The command
+  `sluice`, and the same releases in a window, `sluice-desktop`.
 vendor: BotMakerDev
 homepage: https://github.com/BotMakerDev/sluice
 license: Apache-2.0
 
+# The old window package goes when this one comes: rpm reads replaces as Obsoletes, dpkg as Replaces.
+replaces:
+  - sluice-desktop
+provides:
+  - sluice-desktop
+
 contents:
   - src: target/sluice-all.jar
     dst: /usr/lib/sluice/sluice-all.jar
+  - src: target/sluice-desktop-all.jar
+    dst: /usr/lib/sluice/sluice-desktop-all.jar
 
   - src: target/runtime
     dst: /usr/lib/sluice/runtime
@@ -32,6 +45,20 @@ contents:
     dst: /usr/bin/sluice
     file_info:
       mode: 0755
+  - src: packaging/sluice-desktop
+    dst: /usr/bin/sluice-desktop
+    file_info:
+      mode: 0755
+
+  # The menu entry and its icon, under the name the entry's Icon= gives.
+  - src: packaging/linux/sluice-desktop.desktop
+    dst: /usr/share/applications/sluice-desktop.desktop
+  - src: desktop/src/main/resources/icons/icon-256.png
+    dst: /usr/share/icons/hicolor/256x256/apps/sluice-desktop.png
+  - src: desktop/src/main/resources/icons/icon-64.png
+    dst: /usr/share/icons/hicolor/64x64/apps/sluice-desktop.png
+  - src: desktop/src/main/resources/icons/icon.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/sluice-desktop.svg
 
   - src: README.md
     dst: /usr/share/doc/sluice/README.md
@@ -45,13 +72,27 @@ rpm:
   signature:
     key_file: ${NFPM_RPM_KEY_FILE}
 
-# Hard dependencies: a release runs both, and without them nothing works.
+# git and mvn, which a release runs, and what JavaFX loads by name at start: nothing in the package's own files links
+# GTK, so no tool would find these by itself. On a deb, Conflicts beside Replaces and Provides is what makes apt
+# remove the old sluice-desktop package rather than keep both.
 overrides:
   rpm:
     depends:
       - git
       - maven
+      - gtk3
+      - libXtst
+      - libXxf86vm
+      - mesa-libGL
+      - fontconfig
   deb:
+    conflicts:
+      - sluice-desktop
     depends:
       - git
       - maven
+      - libgtk-3-0t64 | libgtk-3-0
+      - libxtst6
+      - libxxf86vm1
+      - libgl1
+      - libfontconfig1

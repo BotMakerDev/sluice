@@ -1,5 +1,5 @@
 #!/bin/sh
-# The sluice command, as the rpm and the deb install it at /usr/bin/sluice.
+# The sluice command, as the rpm and the deb install it at /usr/bin/sluice (the window, beside it, is sluice-desktop).
 #
 # The package carries its own Java runtime (jlink, at /usr/lib/sluice/runtime), so a machine needs only git and
 # mvn. `exec` lets the JVM replace this shell: Ctrl-C reaches it, so a release stops between two steps and can be

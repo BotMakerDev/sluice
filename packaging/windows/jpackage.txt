@@ -1,6 +1,8 @@
 --name sluice
 --vendor BotMakerDev
---description "Releases a Maven project split over the git submodules of one umbrella repository."
+--description "Releases a Maven project split over the git submodules of one umbrella repository: the sluice command and its window."
 --main-jar sluice-all.jar
 --main-class com.botmaker.sluice.cli.Main
 --win-console
+--icon desktop/src/main/resources/icons/icon.ico
+--add-launcher sluice-desktop=packaging/windows/sluice-desktop.properties

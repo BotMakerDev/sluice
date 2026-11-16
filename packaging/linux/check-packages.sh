@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Checks the Linux packages end to end, as a user gets them, before a tag builds the real ones:
 #
-#   1. the four packages built here (build-packages.sh), the rpms signed by a throwaway key;
+#   1. the two packages built here (build-packages.sh), the rpm signed by a throwaway key;
 #   2. the signed dnf and apt site built from them (.github/scripts/build-repo.sh), served on localhost;
-#   3. in a Fedora and a Debian container, `install.sh --desktop` against that site, gpgcheck on;
+#   3. in a Fedora and a Debian container, `install.sh` against that site, gpgcheck on;
 #   4. `sluice --version`, then sluice-desktop started under Xvfb and the screen saved, for a person to read.
 #
 #   packaging/linux/check-packages.sh [--no-build]      from the repository's root, on x86_64 Linux
@@ -49,7 +49,7 @@ KEY_ID="$(gpg --batch --list-keys --with-colons | awk -F: '/^pub/ {print $5; exi
 
 # The site, built where createrepo_c and apt-ftparchive are a package away.
 rm -rf "$WORK/site" "$WORK/artifacts" && mkdir -p "$WORK/artifacts"
-cp target/sluice.rpm target/sluice.deb target/sluice-desktop.rpm target/sluice-desktop.deb "$WORK/artifacts/"
+cp target/sluice.rpm target/sluice.deb "$WORK/artifacts/"
 # The container's gpg imports the exported key into a home of its own: the host's home stays the host's, owned by
 # its user and in its GnuPG's format.
 "$ENGINE" run --rm -v "$PWD:/src:Z" -w /src -e GPG_KEY_ID="$KEY_ID" \
@@ -86,7 +86,7 @@ for distro in "${DISTROS[@]}"; do
     else
       apt-get update -qq && apt-get install -y -qq curl xvfb x11-apps imagemagick procps > /dev/null
     fi
-    curl -fsSL "$SLUICE_REPO_URL/install.sh" | bash -s -- --desktop
+    curl -fsSL "$SLUICE_REPO_URL/install.sh" | bash
     sluice --version
     test -f /usr/share/applications/sluice-desktop.desktop
     Xvfb :99 -screen 0 1280x860x24 & sleep 2

@@ -27,8 +27,8 @@ jobs:
       - name: Test
         run: mvn -B verify
 
-  # On a tag: the command's jar, and the rpm and the deb of sluice and of sluice-desktop, each package with its own
-  # runtime cut by jlink (packaging/linux/build-packages.sh).
+  # On a tag: the command's and the window's jars, and sluice's rpm and deb, each carrying both on one runtime cut by
+  # jlink (packaging/linux/build-packages.sh).
   linux-packages:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: test
@@ -76,11 +76,11 @@ jobs:
             target/sluice-desktop-all.jar
             target/sluice.rpm
             target/sluice.deb
-            target/sluice-desktop.rpm
-            target/sluice-desktop.deb
           if-no-files-found: error
 
-  # On a tag: an MSI, and the same application image zipped with its scoop manifest; and the window's MSI.
+  # On a tag: one install of the command and the window, as an MSI and as the same application image zipped with its
+  # scoop manifest. sluice.exe and sluice-desktop.exe are two launchers of one image on one runtime
+  # (packaging/windows/jpackage.txt); the window's jar is built here, so it carries JavaFX's Windows natives.
   windows-packages:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: test
@@ -92,53 +92,44 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Build the jar
+      - name: Build the jars
         shell: bash
         run: |
           mvn -B package -DskipTests
           mkdir -p target/input
           mv cli/target/sluice-cli-*-all.jar target/input/sluice-all.jar
+          mv desktop/target/sluice-desktop-*-all.jar target/input/sluice-desktop-all.jar
+      # The runtime is cut as Linux's (packaging/linux/build-packages.sh): what jdeps sees in both jars, less JavaFX,
+      # which is in the window's jar, plus what is reached by lookup alone. A window cannot open on the runner, so the
+      # check is the runtime's modules, read from its release file: jpackage leaves java.exe out of the runtime it
+      # bundles.
       - name: Build the MSI and the zip
         shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
+          seen=$(for jar in target/input/*.jar; do
+              jdeps --print-module-deps --ignore-missing-deps --multi-release 25 "$jar" | tail -1 | tr ',' '\n'
+            done | grep -v '^javafx\.' | sort -u | paste -sd, -)
+          modules="${seen:+$seen,}java.desktop,jdk.unsupported,jdk.zipfs,jdk.charsets,jdk.crypto.ec,jdk.localedata,jdk.accessibility"
           jpackage @packaging/windows/jpackage.txt --type app-image --input target/input --dest target/image \
-            --app-version "$version"
+            --app-version "$version" --add-modules "$modules"
           target/image/sluice/sluice.exe --version
+          test -f target/image/sluice/sluice-desktop.exe \
+            || { echo "::error::the image lacks the window's launcher"; exit 1; }
+          grep -q '^MODULES=.*\bjava\.desktop\b' target/image/sluice/runtime/release \
+            || { echo "::error::the runtime lacks java.desktop"; exit 1; }
           (cd target/image && 7z a -tzip ../sluice-windows.zip sluice > /dev/null)
           jpackage @packaging/windows/jpackage.txt --type msi --input target/input --dest target \
-            --app-version "$version" --win-dir-chooser --win-per-user-install
+            --app-version "$version" --add-modules "$modules" --win-dir-chooser --win-per-user-install
           mv target/sluice-*.msi target/sluice.msi
           hash=$(sha256sum target/sluice-windows.zip | cut -d' ' -f1)
           sed -e "s/\${VERSION}/$version/g" -e "s/\${HASH}/$hash/g" packaging/scoop/sluice.json \
             > target/sluice.json
-      # The window's MSI, its jar built here so it carries JavaFX's Windows natives. Its runtime is cut as Linux's
-      # (packaging/linux/build-packages.sh): what jdeps sees, less JavaFX, which is in the jar, plus what is reached
-      # by lookup alone. A window cannot open on the runner, so the check is the runtime's modules, read from its
-      # release file: jpackage leaves java.exe out of the runtime it bundles.
-      - name: Build the window's MSI
-        shell: bash
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          mkdir -p target/desktop-input
-          mv desktop/target/sluice-desktop-*-all.jar target/desktop-input/sluice-desktop-all.jar
-          desktop=$(jdeps --print-module-deps --ignore-missing-deps --multi-release 25 \
-              target/desktop-input/sluice-desktop-all.jar | tail -1 | tr ',' '\n' | grep -v '^javafx\.' | paste -sd, -)
-          modules="${desktop:+$desktop,}java.desktop,jdk.unsupported,jdk.zipfs,jdk.charsets,jdk.crypto.ec,jdk.localedata,jdk.accessibility"
-          jpackage @packaging/windows/jpackage-desktop.txt --type app-image --input target/desktop-input \
-            --dest target/desktop-image --app-version "$version" --add-modules "$modules"
-          grep -q '^MODULES=.*\bjava\.desktop\b' target/desktop-image/sluice-desktop/runtime/release \
-            || { echo "::error::the window's runtime lacks java.desktop"; exit 1; }
-          jpackage --type msi --app-image target/desktop-image/sluice-desktop --name sluice-desktop \
-            --vendor BotMakerDev --app-version "$version" --dest target \
-            --win-dir-chooser --win-per-user-install --win-menu --win-shortcut
-          mv target/sluice-desktop-*.msi target/sluice-desktop.msi
       - uses: actions/upload-artifact@v4
         with:
           name: windows
           path: |
             target/sluice.msi
-            target/sluice-desktop.msi
             target/sluice-windows.zip
             target/sluice.json
           if-no-files-found: error

@@ -5,10 +5,15 @@ All notable changes to this project are documented here, in the format of
 
 ## [Unreleased]
 
-### Added
+### Changed
 
-- `sluice-desktop.msi`: the window for Windows, on each tag's release beside `sluice.msi`. It carries its own Java
-  runtime, cut as the Linux packages' is, and adds a Start menu entry (`packaging/windows/jpackage-desktop.txt`).
+- **One install holds the command and the window.** `sluice.msi`, `sluice-windows.zip` (scoop) and the `sluice` rpm
+  and deb each carry `sluice` and `sluice-desktop` on one Java runtime, cut to what both jars use. On Windows the
+  window is a second launcher of the same image (`packaging/windows/sluice-desktop.properties`) and alone gets the
+  Start menu entry and the desktop shortcut; scoop adds it as a shortcut. On Linux the package now depends on GTK
+  for the window, and replaces the `sluice-desktop` package of 0.2.1, which the repositories no longer carry;
+  `install.sh --desktop` is still accepted and changes nothing. The release's `sluice-desktop-all.jar` stays, for
+  Linux x86_64 with Java 25.
 
 ## [0.2.1] — 2026-11-13
 
