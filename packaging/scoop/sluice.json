@@ -2,7 +2,7 @@
     "version": "${VERSION}",
     "description": "Releases a Maven project split over the git submodules of one umbrella repository: the sluice command and its window.",
     "homepage": "https://github.com/BotMakerDev/sluice",
-    "license": "Apache-2.0",
+    "license": "PolyForm-Noncommercial-1.0.0",
     "depends": ["git", "maven"],
     "architecture": {
         "64bit": {

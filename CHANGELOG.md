@@ -3,6 +3,13 @@
 All notable changes to this project are documented here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Licensed under PolyForm Noncommercial 1.0.0, copyright LiQiyeDev: free for any noncommercial use, commercial use
+  needs a license from LiQiyeDev. Releases up to v0.3.0 stay Apache-2.0.
+
 ## [0.3.0] — 2026-11-16
 
 ### Fixed

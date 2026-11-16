@@ -42,4 +42,5 @@ desktop's menu or the Start menu).
 
 ## Licence
 
-Apache-2.0.
+[PolyForm Noncommercial 1.0.0](LICENSE): free for any noncommercial use; any commercial use needs a license from
+LiQiyeDev. Versions up to 0.3.0 were released under Apache-2.0.

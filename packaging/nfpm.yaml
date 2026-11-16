@@ -23,7 +23,7 @@ description: |
   `sluice`, and the same releases in a window, `sluice-desktop`.
 vendor: BotMakerDev
 homepage: https://github.com/BotMakerDev/sluice
-license: Apache-2.0
+license: PolyForm-Noncommercial-1.0.0
 
 # The old window package goes when this one comes: rpm reads replaces as Obsoletes, dpkg as Replaces.
 replaces:
