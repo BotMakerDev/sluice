@@ -23,6 +23,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -46,8 +47,29 @@ final class ReleaseFixture {
 
     /** No GitHub, a sleeper that never sleeps, Maven offline, the clock stopped. */
     static Wiring wiring(PublishTarget target) {
+        return wiring(target, Assets.NONE);
+    }
+
+    /** The same, the network's release assets {@code assets}. */
+    static Wiring wiring(PublishTarget target, AssetPins.Fetch assets) {
         return new Wiring(config -> module -> target, Optional::empty, stop -> duration -> true, List.of("-o"),
-                CLOCK);
+                CLOCK, assets);
+    }
+
+    /** Release assets by url, each the bytes it serves. */
+    record Assets(Map<String, byte[]> served) implements AssetPins.Fetch {
+
+        static final Assets NONE = new Assets(Map.of());
+
+        @Override
+        public boolean exists(String url) {
+            return served.containsKey(url);
+        }
+
+        @Override
+        public void download(String url, Path to) throws IOException {
+            Files.write(to, served.get(url));
+        }
     }
 
     /** {@code a} at 1.0.0 then changed; {@code b} pinning it by a property, at 0.1.0 then changed. */
@@ -78,8 +100,13 @@ final class ReleaseFixture {
 
     static Outcome run(FixtureUmbrella umbrella, Options options, PublishTarget target, List<String> lines,
                        String... modules) {
+        return run(umbrella, options, wiring(target), lines, modules);
+    }
+
+    static Outcome run(FixtureUmbrella umbrella, Options options, Wiring wiring, List<String> lines,
+                       String... modules) {
         return Release.run(umbrella.root(), Requests.parse(List.of(modules), Optional.empty()), options,
-                () -> false, event -> said(event, lines), wiring(target));
+                () -> false, event -> said(event, lines), wiring);
     }
 
     static Outcome resume(FixtureUmbrella umbrella, PublishTarget target, List<String> lines) {

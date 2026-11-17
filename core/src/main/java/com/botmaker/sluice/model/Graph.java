@@ -122,6 +122,7 @@ public final class Graph {
         config.afterRelease().keySet().forEach(n -> named(n, "after-release"));
         config.gates().forEach(g -> g.modules().forEach(n -> named(n, "gates." + g.name() + ".modules")));
         config.steps().forEach(s -> s.modules().forEach(n -> named(n, "steps." + s.at().id() + ".modules")));
+        config.assetPins().forEach(p -> named(p.module(), "asset-pins." + p.file() + ".module"));
         config.modules().forEach((path, settings) -> settings.place()
                 .filter(p -> p instanceof Place.After)
                 .ifPresent(p -> named(((Place.After) p).module(), "modules." + path + ".place.after")));

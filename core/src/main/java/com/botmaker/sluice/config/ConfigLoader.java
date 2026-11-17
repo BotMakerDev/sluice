@@ -6,6 +6,7 @@ package com.botmaker.sluice.config;
 import com.botmaker.sluice.Refusal;
 import com.botmaker.sluice.Spelling;
 import com.botmaker.sluice.Version;
+import com.botmaker.sluice.config.Config.AssetPinConfig;
 import com.botmaker.sluice.config.Config.ChangelogConfig;
 import com.botmaker.sluice.config.Config.Command;
 import com.botmaker.sluice.config.Config.Command.Line;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -46,7 +48,7 @@ public final class ConfigLoader {
     public static final String FILE = "sluice.yml";
 
     private static final Set<String> TOP = Set.of("target", "branch", "tag", "relevance", "modules", "text-pins",
-            "edges", "after-release", "changelog", "gates", "steps", "github-releases");
+            "edges", "after-release", "changelog", "gates", "steps", "asset-pins", "github-releases");
 
     private ConfigLoader() {
     }
@@ -161,6 +163,7 @@ public final class ConfigLoader {
                 value(top, "changelog", ConfigLoader::changelog, ChangelogConfig.OFF, problems),
                 each(top, "gates", ConfigLoader::gate, problems),
                 each(top, "steps", ConfigLoader::step, problems),
+                each(top, "asset-pins", ConfigLoader::assetPin, problems),
                 value(top, "github-releases", ConfigLoader::bool, defaults.githubReleases(), problems));
     }
 
@@ -270,6 +273,21 @@ public final class ConfigLoader {
                 .orElseThrow(() -> at.wrong("must be before-release-commit, after-tag or after-snapshot"));
         return new StepConfig(point, optional(keys, "modules").map(Node::strings).orElse(List.of()),
                 command(required(node, keys, "run")));
+    }
+
+    private static AssetPinConfig assetPin(Node node) {
+        Map<String, Node> keys = node.map(Set.of("module", "asset", "file", "bumps"));
+        Node file = required(node, keys, "file");
+        List<String> bumps = optional(keys, "bumps").map(Node::strings).orElse(List.of());
+        if (!json(file.string()) || !bumps.stream().allMatch(ConfigLoader::json)) {
+            throw (json(file.string()) ? keys.get("bumps") : file).wrong("must be .json files");
+        }
+        return new AssetPinConfig(required(node, keys, "module").string(), required(node, keys, "asset").string(),
+                file.string(), bumps);
+    }
+
+    private static boolean json(String file) {
+        return file.toLowerCase(Locale.ROOT).endsWith(".json");
     }
 
     /** A list or a string is the same command on both systems; a map gives each its own. */

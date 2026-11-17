@@ -25,10 +25,15 @@ final class PointerCommit {
     private PointerCommit() {
     }
 
-    /** @param base the run's files without their extension, empty for a preview */
-    static void commit(Runner runner, Path umbrella, Collection<Module> moved, Optional<Path> base, String message) {
+    /**
+     * @param others the umbrella paths of other repositories the run committed in, such as an asset pin's
+     * @param base   the run's files without their extension, empty for a preview
+     */
+    static void commit(Runner runner, Path umbrella, Collection<Module> moved, List<String> others,
+                       Optional<Path> base, String message) {
         List<String> paths = new ArrayList<>();
         moved.forEach(module -> paths.add(module.dir().path()));
+        others.stream().filter(path -> !paths.contains(path)).forEach(paths::add);
         base.ifPresent(b -> List.of(".md", ".json").forEach(ext -> {
             Path file = b.resolveSibling(b.getFileName() + ext);
             if (Files.isRegularFile(file)) {

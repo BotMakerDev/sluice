@@ -119,11 +119,12 @@ public final class Release {
 
     /** What a run reaches outside itself, so a test can put local stand-ins there. */
     record Wiring(Function<Config, Function<Module, PublishTarget>> targets, Supplier<Optional<GitHub>> github,
-                  Function<BooleanSupplier, Sleeper> sleeper, List<String> mavenArgs, Clock clock) {
+                  Function<BooleanSupplier, Sleeper> sleeper, List<String> mavenArgs, Clock clock,
+                  AssetPins.Fetch fetch) {
 
         static Wiring real() {
             return new Wiring(Targets::of, GitHub::fromEnvironment, Sleeper::real, List.of(),
-                    Clock.systemDefaultZone());
+                    Clock.systemDefaultZone(), AssetPins.Fetch.real());
         }
     }
 
@@ -411,11 +412,18 @@ public final class Release {
                     .collect(Collectors.joining(", "));
             String message = (done ? "release: " : "release (stopped): ") + (tags.isEmpty() ? "nothing tagged" : tags);
             Status outcome = done ? (options.execute() ? Status.DONE : Status.PREVIEWED) : Status.STOPPED;
+            // Only a run that is done: a stopped one pins when its resume is, without waiting on it now.
+            List<String> pinned = List.of();
+            if (done) {
+                Map<Module, Version> pushed = new LinkedHashMap<>();
+                entries.forEach(e -> pushed.put(module(e.module()), e.version()));
+                pinned = AssetPins.pin(runner, umbrella, config, pushed, wiring.fetch(), sleeper);
+            }
             if (base.isPresent()) {
                 save(status);
                 log.write(sibling(base.get(), ".md"), title(), outcome, new ReleaseState(status, entries));
             }
-            PointerCommit.commit(runner, umbrella, moved, base, message);
+            PointerCommit.commit(runner, umbrella, moved, pinned, base, message);
             return new Outcome(outcome, base.map(b -> sibling(b, ".md")), base.map(b -> sibling(b, ".json")));
         }
 

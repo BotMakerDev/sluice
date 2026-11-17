@@ -5,6 +5,16 @@ All notable changes to this project are documented here, in the format of
 
 ## [Unreleased]
 
+### Added
+
+- `asset-pins`: a JSON file in any repository of the umbrella, a module or not, that pins a module's released asset
+  by hash (`{module, asset, file, bumps}`). Once a run is done, sluice waits up to 30 minutes for each released
+  module's GitHub release to carry the asset, downloads it, sets the file's `version`, `url` and `sha256`, raises
+  by a patch the `version` of each `bumps` file (the manifest an installed copy is updated by), and commits and
+  pushes those files alone; the umbrella's pointer commit records it. A pin that cannot be written is said in the
+  run's log and never stops the release: a repository off the release branch, with uncommitted changes to those
+  files, or not where its origin is keeps its pin.
+
 ### Changed
 
 - Every file states its license and copyright by REUSE (`REUSE.toml`, `LICENSES/`), every Java source starts with

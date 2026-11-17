@@ -82,6 +82,21 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void readsAnAssetPin() {
+        Config config = ConfigLoader.parse("asset-pins:\n"
+                + "  - {module: cli, asset: cli-all.jar, file: plugin/cli.json, bumps: [plugin/plugin.json]}\n", "t");
+
+        assertEquals(List.of(new Config.AssetPinConfig("cli", "cli-all.jar", "plugin/cli.json",
+                List.of("plugin/plugin.json"))), config.assetPins());
+        Refusal notJson = assertThrows(Refusal.class, () -> ConfigLoader.parse("asset-pins:\n"
+                + "  - {module: cli, asset: cli-all.jar, file: plugin/cli.txt}\n", "t"));
+        assertTrue(notJson.getMessage().contains("must be .json files"), notJson.getMessage());
+        Refusal noAsset = assertThrows(Refusal.class, () -> ConfigLoader.parse("asset-pins:\n"
+                + "  - {module: cli, file: plugin/cli.json}\n", "t"));
+        assertTrue(noAsset.getMessage().contains("needs asset"), noAsset.getMessage());
+    }
+
+    @Test
     void readsEveryKey() {
         Config config = ConfigLoader.parse("""
                 target: jitpack

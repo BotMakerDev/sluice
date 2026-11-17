@@ -29,12 +29,14 @@ import java.util.stream.Stream;
  * @param changelog       the Keep a Changelog feature
  * @param gates           project gates, each a command
  * @param steps           project steps, each a command at a point of the release
+ * @param assetPins       files that pin a module's released asset by hash, set once its release is out
  * @param githubReleases  whether each tag of a module on GitHub gets a release page, its changelog's notes
  */
 public record Config(Target target, String branch, String tagPattern, List<String> relevanceIgnore,
                      Map<String, ModuleConfig> modules, List<TextPinConfig> textPins, List<EdgeConfig> edges,
                      Map<String, Map<String, String>> afterRelease, ChangelogConfig changelog,
-                     List<CommandConfig> gates, List<StepConfig> steps, boolean githubReleases) {
+                     List<CommandConfig> gates, List<StepConfig> steps, List<AssetPinConfig> assetPins,
+                     boolean githubReleases) {
 
     public static final List<String> DEFAULT_IGNORE = List.of("**/*.md", "docs/**");
 
@@ -46,12 +48,13 @@ public record Config(Target target, String branch, String tagPattern, List<Strin
         afterRelease = Collections.unmodifiableMap(new LinkedHashMap<>(afterRelease));
         gates = List.copyOf(gates);
         steps = List.copyOf(steps);
+        assetPins = List.copyOf(assetPins);
     }
 
     /** What an umbrella without a {@code sluice.yml} gets. */
     public static Config defaults() {
         return new Config(new Target.None(), "main", "v{version}", DEFAULT_IGNORE, Map.of(), List.of(), List.of(),
-                Map.of(), ChangelogConfig.OFF, List.of(), List.of(), true);
+                Map.of(), ChangelogConfig.OFF, List.of(), List.of(), List.of(), true);
     }
 
     /** The settings of the submodule at {@code path}, none when the file gives it none. */
@@ -172,6 +175,23 @@ public record Config(Target target, String branch, String tagPattern, List<Strin
 
         public CommandConfig {
             modules = List.copyOf(modules);
+        }
+    }
+
+    /**
+     * A file, in a repository of the umbrella that need not be a module, that pins {@code module}'s released
+     * {@code asset} by hash. Once a release of {@code module} is pushed, the asset of its GitHub release is waited
+     * for and downloaded, and {@code file}'s {@code "version"}, {@code "url"} and {@code "sha256"} get its version,
+     * its download url and its sha256; the file's repository commits and pushes that change alone.
+     *
+     * @param file  the JSON file, from the umbrella's root, in a submodule
+     * @param bumps JSON files of the same repository whose {@code "version"} the same commit raises by a patch,
+     *              such as the manifest an installed copy of the file is updated by
+     */
+    public record AssetPinConfig(String module, String asset, String file, List<String> bumps) {
+
+        public AssetPinConfig {
+            bumps = List.copyOf(bumps);
         }
     }
 
