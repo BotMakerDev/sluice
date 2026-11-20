@@ -21,6 +21,13 @@ A preview is the default. Nothing is tagged, pushed or written without `--execut
 Configuration is an optional `sluice.yml` at the umbrella's root. Without one, sluice reads the graph from the
 poms, tags `v{version}` on `main`, and publishes nowhere.
 
+`sluice.schema.json` is the file's JSON Schema, for an editor's checks and completion. Name it on the file's first
+line until your editor finds it by itself:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/BotMakerDev/sluice/main/sluice.schema.json
+```
+
 ## Install
 
 Fedora/RHEL or Debian/Ubuntu, x86_64:

@@ -1,0 +1,249 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/BotMakerDev/sluice/main/sluice.schema.json",
+  "title": "sluice.yml",
+  "description": "The configuration of sluice, the release tool for a Maven project split over the git submodules of one umbrella. The modules, their pins and their tag order come from the poms; this file holds only what the poms do not say.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "$ref": "#/definitions/target",
+      "description": "Where every module publishes, unless its own entry says otherwise. Default: none."
+    },
+    "branch": {
+      "type": "string",
+      "description": "The release branch of every module.",
+      "default": "main"
+    },
+    "tag": {
+      "type": "string",
+      "pattern": "\\{version\\}",
+      "description": "A tag's name, {version} standing for the version.",
+      "default": "v{version}"
+    },
+    "relevance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ignore": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Globs of files whose change alone does not make a module changed.",
+          "default": ["**/*.md", "docs/**"]
+        }
+      }
+    },
+    "modules": {
+      "type": "object",
+      "description": "Per-module settings, keyed by the submodule's path.",
+      "additionalProperties": {"$ref": "#/definitions/module"}
+    },
+    "text-pins": {
+      "type": "array",
+      "description": "Versions written as text in a file, moved with the module they pin.",
+      "items": {"$ref": "#/definitions/textPin"}
+    },
+    "edges": {
+      "type": "array",
+      "description": "Dependencies no pom says.",
+      "items": {"$ref": "#/definitions/edge"}
+    },
+    "after-release": {
+      "type": "object",
+      "description": "Per module, pom properties set in its back-to-snapshot commit; {tag} and {version} stand for the release.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {"type": ["string", "integer"]}
+      }
+    },
+    "changelog": {
+      "description": "The Keep a Changelog feature: true, or a map naming how each module's notes are read.",
+      "oneOf": [
+        {"type": "boolean"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "extractor": {
+              "$ref": "#/definitions/command",
+              "description": "The command that prints a module's notes for a version, run in the module's folder."
+            },
+            "pins": {
+              "type": "boolean",
+              "description": "Whether a release only for its upstreams gets its notes from the pins it moves.",
+              "default": false
+            }
+          }
+        }
+      ]
+    },
+    "gates": {
+      "type": "array",
+      "description": "Project gates, each a command run before any tag.",
+      "items": {"$ref": "#/definitions/gate"}
+    },
+    "steps": {
+      "type": "array",
+      "description": "Project steps, each a command at a point of the release.",
+      "items": {"$ref": "#/definitions/step"}
+    },
+    "asset-pins": {
+      "type": "array",
+      "description": "Files that pin a module's released asset by hash, set once its release is out.",
+      "items": {"$ref": "#/definitions/assetPin"}
+    },
+    "github-releases": {
+      "type": "boolean",
+      "description": "Whether each tag of a module on GitHub gets a release page, its changelog's notes.",
+      "default": true
+    }
+  },
+  "definitions": {
+    "target": {
+      "oneOf": [
+        {"enum": ["jitpack", "none"]},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maven": {"type": "string", "description": "The Maven repository's URL."}
+          },
+          "required": ["maven"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "jitpack": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "maven": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)*$",
+                  "description": "The Maven version JitPack's builds run, the ceiling of each module's pinned plugins: 3.9.9."
+                }
+              }
+            }
+          },
+          "required": ["jitpack"]
+        }
+      ]
+    },
+    "module": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "alias": {"type": "string", "description": "The module's command-line flag: --<alias> <version>."},
+        "kind": {
+          "enum": ["maven", "tag-only", "ignored"],
+          "description": "maven: released by its pom. tag-only: tagged, no pom. ignored: not released, pinned or read.",
+          "default": "maven"
+        },
+        "place": {
+          "description": "Where it tags beside the order its pins give.",
+          "oneOf": [
+            {"enum": ["first", "last"]},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {"after": {"type": "string", "description": "The module it tags after."}},
+              "required": ["after"]
+            }
+          ]
+        },
+        "target": {"$ref": "#/definitions/target"}
+      }
+    },
+    "textPin": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "in": {"type": "string", "description": "The file, from the umbrella's root."},
+        "pins": {"type": "string", "description": "The module whose version it holds."},
+        "match": {"type": "string", "description": "A regular expression whose first group is the version."},
+        "spelled": {"enum": ["version", "tag"], "default": "version"}
+      },
+      "required": ["in", "pins", "match"]
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": {"type": "string", "description": "The upstream module."},
+        "to": {"type": "string", "description": "The module that depends on it."},
+        "why": {"type": "string"}
+      },
+      "required": ["from", "to", "why"]
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "modules": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "The modules it runs in; every released one when absent."
+        },
+        "run": {"$ref": "#/definitions/command"},
+        "skip-exit": {"type": "integer", "description": "The exit code that means the gate could not run: SKIPPED."}
+      },
+      "required": ["name", "run"]
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "at": {"enum": ["before-release-commit", "after-tag", "after-snapshot"]},
+        "modules": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "The modules it runs in; every released one when absent."
+        },
+        "run": {"$ref": "#/definitions/command"}
+      },
+      "required": ["at", "run"]
+    },
+    "assetPin": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "module": {"type": "string", "description": "The module whose release attaches the asset."},
+        "asset": {"type": "string", "description": "The release asset's file name."},
+        "file": {
+          "type": "string",
+          "pattern": "(?i)\\.json$",
+          "description": "The JSON file whose version, url and sha256 the asset sets."
+        },
+        "bumps": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "(?i)\\.json$"},
+          "description": "JSON files whose version the same commit raises by a patch."
+        }
+      },
+      "required": ["module", "asset", "file"]
+    },
+    "line": {
+      "oneOf": [
+        {"type": "string", "description": "A shell line: sh -c on Linux, cmd /c on Windows."},
+        {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "An argument list."}
+      ]
+    },
+    "command": {
+      "description": "One line for both systems, or a map giving each its own.",
+      "oneOf": [
+        {"$ref": "#/definitions/line"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "linux": {"$ref": "#/definitions/line"},
+            "windows": {"$ref": "#/definitions/line"}
+          },
+          "minProperties": 1
+        }
+      ]
+    }
+  }
+}

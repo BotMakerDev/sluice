@@ -3,6 +3,14 @@
 All notable changes to this project are documented here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `sluice.schema.json`, the JSON Schema of `sluice.yml` (draft-07), so an editor checks and completes the file:
+  every key, closed set and default the loader knows. `SchemaTest` holds it to `ConfigLoader`: each map's keys are
+  the ones its refusal of an unknown key lists, each closed set's values the ones it accepts.
+
 ## [0.3.1] — 2026-11-17
 
 ### Added
