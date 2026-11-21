@@ -10,6 +10,10 @@ All notable changes to this project are documented here, in the format of
 - sluice-desktop's Releases tab no longer shows a run that is still going as stopped ("Stopped here; the run said
   no more about why."). A run whose state says running is live while a release holds the umbrella's lock
   (`LoggedRelease.live`); only a state with no live holder is a run that died.
+- A pin move no longer fails with `versions:set-property failed … Comparison method violates its general
+  contract!`. versions-maven-plugin sorts every version a repository lists, and its comparator is not consistent
+  over JitPack's mix of `0.16.0`, `v0.16.0` and snapshots; every plugin run now adds
+  `-Djava.util.Arrays.useLegacyMergeSort=true` to `MAVEN_OPTS`, kept beside the caller's own.
 
 ## [0.4.0] — 2026-11-21
 

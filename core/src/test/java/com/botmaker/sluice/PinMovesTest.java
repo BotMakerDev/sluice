@@ -13,6 +13,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -44,6 +46,14 @@ class PinMovesTest {
                 said.get(2));
         assertTrue(said.get(3).contains("$ replace") && said.get(3).contains("<parent>"), said.get(3));
         assertTrue(said.get(4).contains("$ replace group 1"), said.get(4));
+    }
+
+    @Test
+    void everyPluginRunSortsWithTheLegacySortOnce() {
+        assertEquals(Map.of("MAVEN_OPTS", PinMoves.LEGACY_SORT), PinMoves.mavenEnv(Optional.empty()));
+        assertEquals(Map.of("MAVEN_OPTS", "-Xmx1g " + PinMoves.LEGACY_SORT), PinMoves.mavenEnv(Optional.of(" -Xmx1g ")));
+        assertEquals(Map.of("MAVEN_OPTS", "-Xmx1g " + PinMoves.LEGACY_SORT),
+                PinMoves.mavenEnv(Optional.of("-Xmx1g " + PinMoves.LEGACY_SORT)));
     }
 
     @Test

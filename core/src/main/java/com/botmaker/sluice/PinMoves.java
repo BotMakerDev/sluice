@@ -28,10 +28,19 @@ import java.util.regex.Pattern;
  *
  * <p><b>Every move is read back</b> once it ran: {@code set-property} is silent about a property the pom does not
  * declare, and a release that believes it moved a pin it did not move is the failure worth being loud about.
+ *
+ * <p><b>Each run sorts with the JDK's legacy merge sort</b> ({@link #LEGACY_SORT}, added to {@code MAVEN_OPTS}): the
+ * plugin sorts every version a repository lists before it sets a property, and its comparator is not consistent over
+ * a mix such as {@code 0.16.0}, {@code v0.16.0} and {@code 0.16.1-SNAPSHOT}, which JitPack serves side by side. The
+ * JDK's default sort then throws {@code Comparison method violates its general contract!} and the move fails; the
+ * legacy sort does not check, and the plugin only needs the version it was given (2026-11-21).
  */
 public final class PinMoves {
 
     public static final String PLUGIN = "org.codehaus.mojo:versions-maven-plugin:2.18.0";
+
+    /** The JVM option that keeps the plugin's inconsistent version sort from throwing. */
+    public static final String LEGACY_SORT = "-Djava.util.Arrays.useLegacyMergeSort=true";
 
     private static final Pattern PARENT_VERSION =
             Pattern.compile("(<parent>(?:(?!</parent>)[\\s\\S])*?<version>)\\s*[^<]*?\\s*(</version>)");
@@ -87,12 +96,22 @@ public final class PinMoves {
         }
     }
 
+    /** {@code MAVEN_OPTS} for a plugin run: the caller's {@code opts}, with {@link #LEGACY_SORT} added once. */
+    static Map<String, String> mavenEnv(Optional<String> opts) {
+        String given = opts.map(String::strip).orElse("");
+        if (List.of(given.split("\\s+")).contains(LEGACY_SORT)) {
+            return Map.of("MAVEN_OPTS", given);
+        }
+        return Map.of("MAVEN_OPTS", given.isEmpty() ? LEGACY_SORT : given + " " + LEGACY_SORT);
+    }
+
     private void mvn(Path pom, String goal, String... properties) {
         List<String> argv = new ArrayList<>(List.of("mvn", "-B", "-q"));
         argv.addAll(mavenArgs);
         argv.addAll(List.of("-f", pom.toString(), PLUGIN + ":" + goal));
         argv.addAll(List.of(properties));
-        Proc.Result result = runner.run(pom.toAbsolutePath().getParent(), argv, Map.of());
+        Proc.Result result = runner.run(pom.toAbsolutePath().getParent(), argv,
+                mavenEnv(Optional.ofNullable(System.getenv("MAVEN_OPTS"))));
         if (!result.ok()) {
             String errors = String.join("\n", result.out().lines().filter(line -> line.contains("[ERROR]"))
                     .limit(10).toList());
