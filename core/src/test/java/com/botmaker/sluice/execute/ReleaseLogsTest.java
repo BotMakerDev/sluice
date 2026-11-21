@@ -60,6 +60,23 @@ class ReleaseLogsTest {
     }
 
     @Test
+    void onlyTheNewestRunningRunIsLiveAndOnlyWhileTheLockIsHeld() throws IOException {
+        FixtureUmbrella umbrella = pinned(tmp);
+        Path dir = Files.createDirectories(umbrella.root().resolve(StateFile.DIR));
+        ReleaseState running = new ReleaseState(ReleaseState.Status.RUNNING,
+                List.of(new Entry("a", Version.parse("1.0.1").orElseThrow(), Stage.TAGGED, "")));
+        StateFile.write(dir.resolve("2026-11-10-1200.json"), running);
+        StateFile.write(dir.resolve("2026-11-09-0900.json"), running);
+
+        assertEquals(List.of(false, false), ReleaseLogs.list(umbrella.root()).stream().map(LoggedRelease::live).toList());
+        try (Lock held = Lock.take(umbrella.root(), line -> { })) {
+            assertEquals(List.of(true, false),
+                    ReleaseLogs.list(umbrella.root()).stream().map(LoggedRelease::live).toList());
+            assertTrue(ReleaseLogs.read(dir.resolve("2026-11-10-1200.json")).live());
+        }
+    }
+
+    @Test
     void readsARunByEitherFile() {
         FixtureUmbrella umbrella = pinned(tmp);
         Release.Outcome outcome = run(umbrella, EXECUTE, served(), lines(), "a", "b");

@@ -3,6 +3,14 @@
 All notable changes to this project are documented here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- sluice-desktop's Releases tab no longer shows a run that is still going as stopped ("Stopped here; the run said
+  no more about why."). A run whose state says running is live while a release holds the umbrella's lock
+  (`LoggedRelease.live`); only a state with no live holder is a run that died.
+
 ## [0.4.0] — 2026-11-21
 
 ### Added

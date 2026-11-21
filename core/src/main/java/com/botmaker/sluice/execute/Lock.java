@@ -35,11 +35,18 @@ final class Lock implements AutoCloseable {
         this.mine = mine;
     }
 
+    /**
+     * Whether a release holds {@code umbrella}'s lock now: its file is there and its holder still runs, or runs on
+     * another host, where nothing here can tell. False for a folder that is no git repository.
+     */
+    static boolean held(Path umbrella) {
+        return file(umbrella).filter(Files::isRegularFile).map(file -> !dead(holder(file))).orElse(false);
+    }
+
     /** Takes the umbrella's lock, or refuses naming who holds it. */
     static Lock take(Path umbrella, Consumer<String> say) {
-        Path file = Git.line(umbrella, "rev-parse", "--absolute-git-dir").map(Path::of)
-                .orElseThrow(() -> new Refusal(umbrella + " is not a git repository, so it holds no lock"))
-                .resolve(FILE);
+        Path file = file(umbrella)
+                .orElseThrow(() -> new Refusal(umbrella + " is not a git repository, so it holds no lock"));
         String mine = "pid=" + ProcessHandle.current().pid() + "\nhost=" + host() + "\nsince=" + Instant.now()
                 + "\n";
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -65,6 +72,10 @@ final class Lock implements AutoCloseable {
             }
         }
         throw new Refusal(file + ": the lock was taken by another run while this one took it over");
+    }
+
+    private static Optional<Path> file(Path umbrella) {
+        return Git.line(umbrella, "rev-parse", "--absolute-git-dir").map(Path::of).map(dir -> dir.resolve(FILE));
     }
 
     /** Whether the holder is a run of this host that no longer runs. */

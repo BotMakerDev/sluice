@@ -9,6 +9,7 @@ import com.botmaker.sluice.execute.Release.Status;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,9 +36,12 @@ public final class ReleaseLogs {
      * @param state      what its state file says, when it could be read
      * @param status     how its log says it ended, when it says
      * @param unreadable why its state file could not be read, when it could not
+     * @param live       whether it still runs: its state says running and a release holds the umbrella's lock now;
+     *                   a state that says running with no holder was left by a run that died
      */
     public record LoggedRelease(String name, Optional<Path> log, Optional<Path> stateFile,
-                                Optional<ReleaseState> state, Optional<Status> status, Optional<String> unreadable) {
+                                Optional<ReleaseState> state, Optional<Status> status, Optional<String> unreadable,
+                                boolean live) {
     }
 
     /** Every run under {@code umbrella}'s {@code releases/}, the newest first. */
@@ -54,11 +58,24 @@ public final class ReleaseLogs {
         } catch (IOException e) {
             throw new Refusal(dir + ": could not be listed (" + e.getMessage() + ")");
         }
-        return firsts.values().stream().map(ReleaseLogs::read).toList();
+        // The lock names no run: only the newest whose state says running is the one holding it.
+        boolean held = Lock.held(umbrella);
+        List<LoggedRelease> runs = new ArrayList<>();
+        for (Path file : firsts.values()) {
+            LoggedRelease run = read(file, held);
+            held &= !run.live();
+            runs.add(run);
+        }
+        return List.copyOf(runs);
     }
 
     /** The run whose state or log is {@code file}, read with the other file beside it. */
     public static LoggedRelease read(Path file) {
+        Path releases = file.toAbsolutePath().getParent();
+        return read(file, releases.getParent() != null && Lock.held(releases.getParent()));
+    }
+
+    private static LoggedRelease read(Path file, boolean held) {
         Matcher name = StateFile.NAME.matcher(file.getFileName().toString());
         if (!name.matches()) {
             throw new Refusal(file + ": not a release's file (" + StateFile.DIR + "/<YYYY-MM-DD-HHMM>.json or .md)");
@@ -75,7 +92,8 @@ public final class ReleaseLogs {
                 unreadable = Optional.of(refusal.getMessage());
             }
         }
-        return new LoggedRelease(base, md, json, state, md.flatMap(ReleaseLogs::status), unreadable);
+        boolean live = held && state.filter(s -> s.status() == ReleaseState.Status.RUNNING).isPresent();
+        return new LoggedRelease(base, md, json, state, md.flatMap(ReleaseLogs::status), unreadable, live);
     }
 
     /** The {@code Status:} line a log starts with. */

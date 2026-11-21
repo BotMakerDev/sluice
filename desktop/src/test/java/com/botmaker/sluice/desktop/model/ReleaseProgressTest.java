@@ -19,12 +19,29 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ReleaseProgressTest {
 
     private static LoggedRelease logged(Optional<ReleaseState> state, Optional<Release.Status> status) {
         return new LoggedRelease("2026-11-13-1042", Optional.empty(), Optional.empty(), state, status,
-                Optional.empty());
+                Optional.empty(), false);
+    }
+
+    @Test
+    void aRunThatStillHoldsTheLockIsReleasingNotStopped() {
+        ReleaseState state = new ReleaseState(ReleaseState.Status.RUNNING, List.of(
+                entry("a", "1.0.1", Stage.PUBLISHED, ""),
+                entry("b", "0.1.1", Stage.DECIDED, "")));
+        LoggedRelease live = new LoggedRelease("2026-11-13-1042", Optional.empty(), Optional.empty(),
+                Optional.of(state), Optional.empty(), Optional.empty(), true);
+
+        ReleaseProgress progress = ReleaseProgress.past(live, "v{version}");
+
+        assertEquals(Phase.RELEASING, progress.phase());
+        assertEquals(NodeState.RUNNING, progress.lanes().get(0).state(Step.SNAPSHOT));
+        assertFalse(progress.lanes().get(0).failed());
+        assertEquals("pending", progress.health());
     }
 
     private static ReleaseState.Entry entry(String module, String version, Stage stage, String detail) {

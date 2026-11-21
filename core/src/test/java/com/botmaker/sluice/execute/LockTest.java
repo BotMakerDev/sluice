@@ -45,6 +45,19 @@ class LockTest {
     }
 
     @Test
+    void heldOnlyWhileALiveRunHoldsIt() throws Exception {
+        FixtureUmbrella umbrella = pinned(tmp.resolve("umbrella"));
+        assertFalse(Lock.held(umbrella.root()));
+        try (Lock taken = Lock.take(umbrella.root(), line -> { })) {
+            assertTrue(Lock.held(umbrella.root()));
+        }
+        assertFalse(Lock.held(umbrella.root()));
+        Files.writeString(lockFile(umbrella), "pid=" + Long.MAX_VALUE + "\nhost=" + Lock.host() + "\nsince=then\n");
+        assertFalse(Lock.held(umbrella.root()), "a dead run's lock holds nothing");
+        assertFalse(Lock.held(Files.createDirectories(tmp.resolve("plain"))), "no git repository, no lock");
+    }
+
+    @Test
     void deadHolderIsTakenOver() throws Exception {
         FixtureUmbrella umbrella = pinned(tmp);
         Process gone = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),

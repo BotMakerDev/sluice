@@ -220,7 +220,8 @@ public record ReleaseProgress(Phase phase, List<Lane> lanes, List<GateVerdict> v
         Phase phase = state.map(s -> switch (s.status()) {
             case DONE -> Phase.DONE;
             case STOPPED -> Phase.STOPPED;
-            case RUNNING -> Phase.DIED;
+            // Running in another window or a terminal: what it reached so far, nothing stopped.
+            case RUNNING -> release.live() ? Phase.RELEASING : Phase.DIED;
         }).orElse(release.status().filter(s -> s == Release.Status.REFUSED)
                 .map(s -> Phase.REFUSED).orElse(Phase.STOPPED));
         List<Lane> lanes = new ArrayList<>();
@@ -232,7 +233,9 @@ public record ReleaseProgress(Phase phase, List<Lane> lanes, List<GateVerdict> v
             List<String> errors = entry.detail().isBlank() ? List.of() : List.of(entry.detail());
             // The module it stopped in, never the next one it did not reach.
             boolean stoppedHere = current && stopped && (entry.stage() != Stage.DECIDED || !errors.isEmpty());
-            lanes.add(lane(entry.module(), entry.version().tag(tagPattern), entry.stage(), stoppedHere,
+            // A run still going is at its current module, whose next step runs.
+            boolean here = phase == Phase.RELEASING ? current : stoppedHere;
+            lanes.add(lane(entry.module(), entry.version().tag(tagPattern), entry.stage(), here,
                     stopped, errors, Optional.empty()));
         }
         return new ReleaseProgress(phase, lanes, List.of(), started, Duration.ZERO);
