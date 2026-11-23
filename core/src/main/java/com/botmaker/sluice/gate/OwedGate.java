@@ -34,7 +34,7 @@ public final class OwedGate implements Gate {
                 + edge.why() + ")").distinct().collect(Collectors.joining(", "));
         Set<Module> added = new LinkedHashSet<>();
         owed.forEach(edge -> added.add(edge.downstream()));
-        String command = "sluice " + ctx.plan().releasing().entrySet().stream()
+        String command = "sluice release " + ctx.plan().releasing().entrySet().stream()
                 .map(e -> flag(e.getKey(), e.getValue().toString())).collect(Collectors.joining(" "))
                 + added.stream().map(module -> " " + flag(module, "patch")).collect(Collectors.joining());
         return List.of(refused("owed a release: " + which + "; release them too: " + command

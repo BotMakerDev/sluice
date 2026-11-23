@@ -115,7 +115,7 @@ class ReleaseTabTest extends FxHeadless {
     void aCleanPreviewArmsExecuteAndSaysWhatItWouldCut() throws TimeoutException {
         previewAllPatch();
 
-        assertEquals("sluice --all patch", tab.commandLine());
+        assertEquals("sluice preview --all patch", tab.commandLine());
         assertFalse(tab.executeButton().isDisabled());
         assertEquals("1.0.0 → 1.0.1", tab.cut("a"));
         assertTrue(tab.output().startsWith("decided:\n  a 1.0.0 -> 1.0.1\n  b 0.1.0 -> 0.1.1\n"), tab.output());
@@ -129,7 +129,7 @@ class ReleaseTabTest extends FxHeadless {
         interact(() -> tab.level().setValue(Level.MINOR));
 
         assertTrue(tab.executeButton().isDisabled());
-        assertEquals("sluice --all minor", tab.commandLine());
+        assertEquals("sluice preview --all minor", tab.commandLine());
     }
 
     @Test

@@ -25,9 +25,10 @@ class ReleaseSpecTest {
         picked.put("cli", " minor ");
         ReleaseSpec spec = new ReleaseSpec(Optional.of(Level.PATCH), picked, true, DependentsFlag.WITH, true);
 
-        assertEquals("sluice --all patch --module core=1.2.0 --module cli=minor --with-dependents --force --no-wait",
-                spec.commandLine());
-        assertEquals(spec.commandLine() + " --execute", spec.executeCommandLine());
+        assertEquals("sluice preview --all patch --module core=1.2.0 --module cli=minor --with-dependents --force "
+                + "--no-wait", spec.commandLine());
+        assertEquals(spec.commandLine().replace("sluice preview", "sluice release"), spec.executeCommandLine());
+        assertEquals("sluice resume --force --no-wait", spec.resumeCommandLine(), "a resume takes no dependents");
     }
 
     @Test
@@ -55,7 +56,7 @@ class ReleaseSpecTest {
         ReleaseSpec spec = new ReleaseSpec(Optional.empty(), Map.of("a", "patch"), false, DependentsFlag.WITHOUT,
                 false);
 
-        assertEquals("sluice --module a=patch --no-dependents", spec.commandLine());
+        assertEquals("sluice preview --module a=patch --no-dependents", spec.commandLine());
         assertEquals(Optional.of(Dependents.LEAVE), spec.options(false).dependents());
         assertEquals(Optional.empty(),
                 new ReleaseSpec(Optional.empty(), Map.of(), false, DependentsFlag.CONFIG, false)

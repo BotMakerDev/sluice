@@ -240,7 +240,7 @@ public final class Release {
         if (StateFile.newest(umbrella).isEmpty()) {
             throw new Refusal("nothing to resume: " + NO_STATE);
         }
-        // The same run --status shows.
+        // The same run sluice status shows.
         Saved saved = state(umbrella, Optional.empty());
         Path file = saved.file();
         ReleaseState state = saved.state();

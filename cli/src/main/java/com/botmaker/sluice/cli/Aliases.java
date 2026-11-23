@@ -70,17 +70,20 @@ final class Aliases {
         return Level.of(word).isPresent() || Version.parse(word).isPresent();
     }
 
-    /** The umbrella {@code --umbrella} names, else the working directory. */
+    /**
+     * The umbrella the last {@code --umbrella} names, else the working directory: one after the verb wins over one
+     * before it, as the run reads them.
+     */
     private static Path umbrella(List<String> args) {
+        Path umbrella = Path.of("");
         for (int i = 0; i < args.size(); i++) {
             String arg = args.get(i);
             if (arg.equals("--umbrella") && i + 1 < args.size()) {
-                return Path.of(args.get(i + 1));
-            }
-            if (arg.startsWith("--umbrella=")) {
-                return Path.of(arg.substring("--umbrella=".length()));
+                umbrella = Path.of(args.get(i + 1));
+            } else if (arg.startsWith("--umbrella=")) {
+                umbrella = Path.of(arg.substring("--umbrella=".length()));
             }
         }
-        return Path.of("");
+        return umbrella;
     }
 }

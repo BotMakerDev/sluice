@@ -12,8 +12,7 @@ import com.botmaker.sluice.model.Module;
 import com.botmaker.sluice.model.Pin;
 import com.botmaker.sluice.model.TagOrder;
 import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.ParentCommand;
+import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Spec;
 import picocli.CommandLine.Model.CommandSpec;
 
@@ -27,18 +26,15 @@ import java.util.concurrent.Callable;
         description = "Print the modules in tag order, and each dependency edge with its pins.")
 final class GraphCommand implements Callable<Integer> {
 
-    @ParentCommand
-    private Main parent;
-
     @Spec
     private CommandSpec spec;
 
-    @Option(names = "--umbrella", paramLabel = "DIR", description = "The umbrella repository (default: here).")
-    private Path umbrella;
+    @Mixin
+    private Commands.Umbrella umbrella;
 
     @Override
     public Integer call() {
-        Path root = umbrella != null ? umbrella.toAbsolutePath().normalize() : parent.umbrella();
+        Path root = umbrella.root();
         Config config = ConfigLoader.load(root);
         Graph graph = Graph.build(UmbrellaLayout.of(root), config);
         PrintWriter out = spec.commandLine().getOut();

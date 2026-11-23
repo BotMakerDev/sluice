@@ -47,7 +47,7 @@ class OwedGateTest {
 
         assertEquals(Status.REFUSED, verdict.status());
         assertTrue(verdict.line().startsWith("owed a release: b (pins a, "), verdict.line());
-        assertTrue(verdict.line().endsWith("; release them too: sluice --module a=1.0.1 --module b=patch, "
+        assertTrue(verdict.line().endsWith("; release them too: sluice release --module a=1.0.1 --module b=patch, "
                 + "or add --no-dependents"), verdict.line());
         assertEquals(verdict.line(), verdict.refusal(), "one line, not said twice");
     }

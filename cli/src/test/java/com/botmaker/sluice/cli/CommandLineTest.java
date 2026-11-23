@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CommandLineTest {
@@ -50,47 +51,67 @@ class CommandLineTest {
         FixtureUmbrella umbrella = LocalEngine.chain(tmp);
         LocalEngine engine = new LocalEngine();
 
-        Ran preview = sluice(engine, umbrella, "--all", "patch");
+        Ran preview = sluice(engine, umbrella, "preview", "--all", "patch");
         assertEquals(Main.OK, preview.code(), preview.toString());
         assertTrue(preview.out().contains("previewed"), preview.toString());
 
-        Ran owing = sluice(engine, umbrella, "--module", "a");
+        Ran owing = sluice(engine, umbrella, "preview", "--module", "a");
         assertEquals(Main.OK, owing.code(), owing.toString());
         assertTrue(owing.out().contains("b 0.1.0 -> 0.1.1") && owing.out().contains("c 0.2.0 -> 0.2.1"),
                 owing.toString());
 
-        Ran both = sluice(engine, umbrella, "--module", "a", "--with-dependents", "--no-dependents");
+        Ran both = sluice(engine, umbrella, "preview", "--module", "a", "--with-dependents", "--no-dependents");
         assertEquals(Main.USAGE, both.code(), both.toString());
 
-        Ran unknown = sluice(engine, umbrella, "--module", "nope");
+        Ran unknown = sluice(engine, umbrella, "preview", "--module", "nope");
         assertEquals(Main.REFUSED, unknown.code(), unknown.toString());
         assertTrue(unknown.err().contains("\"nope\" is no module"), unknown.toString());
 
         engine.failing().add("b:v0.1.1");
-        Ran stopped = sluice(engine, umbrella, "--module", "a", "--module", "b", "--module", "c", "--execute");
+        Ran stopped = sluice(engine, umbrella, "release", "--module", "a", "--module", "b", "--module", "c");
         assertEquals(Main.STOPPED, stopped.code(), stopped.toString());
-        assertTrue(stopped.out().contains("--resume"), stopped.toString());
+        assertTrue(stopped.out().contains("sluice resume"), stopped.toString());
 
-        Ran status = sluice(engine, umbrella, "--status");
+        Ran status = sluice(engine, umbrella, "status");
         assertEquals(Main.STOPPED, status.code(), status.toString());
         assertTrue(status.out().contains("b 0.1.1: failed (its build failed)"), status.toString());
         String file = status.out().lines().findFirst().orElseThrow();
-        Ran named = sluice(engine, umbrella, "--status", "releases/" + Path.of(file).getFileName());
+        Ran named = sluice(engine, umbrella, "status", "releases/" + Path.of(file).getFileName());
         assertEquals(status, named, "a relative FILE is found under the umbrella");
 
         engine.failing().clear();
-        Ran resumed = sluice(engine, umbrella, "--resume", "--execute");
+        Ran dry = sluice(engine, umbrella, "resume", "--dry-run");
+        assertEquals(Main.OK, dry.code(), dry.toString());
+        assertEquals(status.out(), sluice(engine, umbrella, "status").out(), "a resume's dry run writes nothing");
+        Ran resumed = sluice(engine, "resume", "--umbrella", umbrella.root().toString());
         assertEquals(Main.OK, resumed.code(), resumed.toString());
 
-        assertEquals(Main.USAGE, sluice(engine, umbrella, "--bogus").code());
-        assertEquals(Main.USAGE, sluice(engine, umbrella).code(), "nothing to do");
-        assertEquals(Main.USAGE, sluice(engine, umbrella, "--resume", "--sync-pins").code(), "two modes");
-        assertEquals(Main.USAGE, sluice(engine, umbrella, "--all", "huge").code());
-        Ran unused = sluice(engine, umbrella, "--sync-pins", "--force");
-        assertEquals(Main.USAGE, unused.code(), unused.toString());
-        assertTrue(unused.err().contains("--force does not apply to --sync-pins"), unused.toString());
-        assertEquals(Main.USAGE, sluice(engine, umbrella, "--status", "--execute").code());
+        assertEquals(Main.USAGE, sluice(engine, umbrella, "preview", "--bogus").code());
+        assertEquals(Main.USAGE, sluice(engine, umbrella).code(), "no verb");
+        assertEquals(Main.USAGE, sluice(engine, umbrella, "preview").code(), "nothing to release");
+        assertEquals(Main.USAGE, sluice(engine, umbrella, "preview", "--all", "huge").code());
+        for (String gone : List.of("--execute", "--resume", "--status", "--sync-pins", "--why")) {
+            assertEquals(Main.USAGE, sluice(engine, umbrella, "preview", "--all", "patch", gone).code(), gone);
+        }
+        assertEquals(Main.USAGE, sluice(engine, umbrella, "sync-pins", "--force").code(), "not a sync's flag");
+        assertEquals(Main.USAGE, sluice(engine, umbrella, "resume", "--all", "patch").code(), "a resume picks none");
+        assertEquals(Main.OK, sluice(engine, umbrella, "sync-pins", "--dry-run").code());
         assertEquals(Main.OK, sluice(engine, "--help").code());
+        assertEquals(Main.OK, sluice(engine, "release", "--help").code());
+    }
+
+    @Test
+    void whySaysEveryReason() {
+        FixtureUmbrella umbrella = LocalEngine.chain(tmp);
+        LocalEngine engine = new LocalEngine();
+
+        Ran preview = sluice(engine, umbrella, "preview", "--module", "a", "--no-dependents");
+        Ran why = sluice(engine, umbrella, "why", "--module", "a", "--no-dependents");
+
+        assertEquals(Main.OK, why.code(), why.toString());
+        assertEquals(Main.OK, preview.code(), preview.toString());
+        assertTrue(why.out().contains("a 1.0.0 -> 1.0.1  ("), why.toString());
+        assertFalse(preview.out().contains("a 1.0.0 -> 1.0.1  ("), preview.toString());
     }
 
     @Test
@@ -99,8 +120,8 @@ class CommandLineTest {
         LocalEngine.config(umbrella, "modules:\n  b: {alias: bee}\n");
         LocalEngine engine = new LocalEngine();
 
-        Ran byModule = sluice(engine, umbrella, "--module", "a", "--module", "b=minor", "--module", "c", "--why");
-        Ran byAlias = sluice(engine, umbrella, "--module", "a", "--bee", "minor", "--module", "c", "--why");
+        Ran byModule = sluice(engine, umbrella, "why", "--module", "a", "--module", "b=minor", "--module", "c");
+        Ran byAlias = sluice(engine, umbrella, "why", "--module", "a", "--bee", "minor", "--module", "c");
 
         assertEquals(Main.OK, byModule.code(), byModule.toString());
         assertEquals(byModule, byAlias);
@@ -113,9 +134,9 @@ class CommandLineTest {
         LocalEngine.config(umbrella, "modules:\n  b: {alias: bee}\n  c: {alias: force}\n");
         String root = umbrella.root().toString();
 
-        assertEquals(List.of("--umbrella", root, "--module", "bee=1.2.0", "--force", "--module", "bee", "--execute"),
-                Aliases.expand(List.of("--umbrella", root, "--bee", "1.2.0", "--force", "--bee", "--execute"),
-                        Set.of("--umbrella", "--force", "--execute")));
+        assertEquals(List.of("release", "--umbrella", root, "--module", "bee=1.2.0", "--force", "--module", "bee"),
+                Aliases.expand(List.of("release", "--umbrella", root, "--bee", "1.2.0", "--force", "--bee"),
+                        Set.of("--umbrella", "--force")));
         assertEquals(List.of("--umbrella=" + root, "--module", "bee=major"),
                 Aliases.expand(List.of("--umbrella=" + root, "--bee=major"), Set.of("--umbrella")));
     }

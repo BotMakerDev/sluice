@@ -7,16 +7,21 @@ every module goes back to its next `-SNAPSHOT` afterwards. Gates run before anyt
 partway resumes where it stopped.
 
 ```text
-sluice --all patch              # preview: what would be released, and every gate's verdict
-sluice --module core=2.0.0 --execute
-sluice --resume --execute       # after a stop
+sluice preview --all patch      # what would be released, and every gate's verdict
+sluice release --module core=2.0.0
+sluice why --module core        # a preview that says why each module is in or out
+sluice resume [--dry-run]       # after a stop
+sluice status [FILE]            # a run's state, module by module
+sluice sync-pins [--dry-run]    # move every pin to its upstream's version on the branch
 sluice graph                    # the modules, their pins and the tag order
 ```
 
-A module's alias in `sluice.yml` is a flag too: `--sdk 1.10.0` is `--module sdk=1.10.0`. Exit codes: 0 done or
-previewed clean, 1 refused, 2 stopped partway (`--resume` goes on), 3 usage.
+A module's alias in `sluice.yml` is a flag too: `--sdk 1.10.0` is `--module sdk=1.10.0`. Every verb takes
+`--umbrella DIR`; `sluice <verb> --help` lists the rest. Exit codes: 0 done or previewed clean, 1 refused, 2 stopped
+partway (`sluice resume` goes on), 3 usage.
 
-A preview is the default. Nothing is tagged, pushed or written without `--execute`.
+Only `release`, `resume` and `sync-pins` write; `preview`, `why`, `status`, `graph`, and `resume` or
+`sync-pins` with `--dry-run`, write nothing.
 
 A run repairs what it can before refusing, and a preview says what it would do:
 
@@ -28,8 +33,8 @@ A run repairs what it can before refusing, and a preview says what it would do:
 - A module ahead of its origin is pushed, then its CI is waited on (`ci-wait`, minutes). A red run that failed in
   an upstream gone green since is rerun.
 - A module whose upstream the run releases is built at its new pins just before its release commit.
-- A module its target has not served in time holds back only the modules that need it; `--resume` goes on with
-  them, and runs no `after-tag` step twice.
+- A module its target has not served in time holds back only the modules that need it; `sluice resume` goes on
+  with them, and runs no `after-tag` step twice.
 
 Configuration is an optional `sluice.yml` at the umbrella's root. Without one, sluice reads the graph from the
 poms, tags `v{version}` on `main`, and publishes nowhere.

@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 /**
  * Every side effect of a release, echoed as the command a person would type. A dry run echoes and runs nothing,
- * which is what makes the preview the default: what it prints is what {@code --execute} would do.
+ * which is what makes the preview the default: what it prints is what the release would do.
  *
  * <p>{@code stop} is asked between commands, never during one: a {@code git push} cut in half is worse than one
  * more tag.

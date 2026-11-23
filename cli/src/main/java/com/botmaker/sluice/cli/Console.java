@@ -67,9 +67,9 @@ final class Console implements Consumer<Event> {
     void ended(Outcome outcome) {
         out.println(switch (outcome.status()) {
             case DONE -> "done";
-            case PREVIEWED -> "previewed: nothing was written; --execute releases it";
+            case PREVIEWED -> "previewed: nothing was written; sluice release, with the same flags, releases it";
             case REFUSED -> "refused: nothing was tagged";
-            case STOPPED -> "stopped partway: sluice --resume --execute goes on from here";
+            case STOPPED -> "stopped partway: sluice resume goes on from here";
         });
         outcome.log().ifPresent(log -> out.println("log: " + log));
         outcome.state().ifPresent(state -> out.println("state: " + state));

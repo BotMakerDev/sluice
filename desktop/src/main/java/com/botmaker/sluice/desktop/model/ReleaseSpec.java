@@ -89,32 +89,38 @@ public record ReleaseSpec(Optional<Level> all, Map<String, String> picked, boole
         return new Release.Options(execute, force, dependents.dependents(), !noWait);
     }
 
-    /** {@code sluice --all minor --module core=1.2.0 --force}: the same run from a terminal, as a preview. */
+    /** {@code sluice preview --all minor --module core=1.2.0 --force}: the same run from a terminal, as a preview. */
     public String commandLine() {
-        List<String> words = new ArrayList<>(List.of("sluice"));
-        all.ifPresent(level -> words.addAll(List.of("--all", level.spelling())));
-        moduleArgs().forEach(arg -> words.addAll(List.of("--module", arg)));
-        flags(words);
-        return String.join(" ", words);
+        return selected("preview");
     }
 
     /** The command line that cuts it. */
     public String executeCommandLine() {
-        return commandLine() + " --execute";
+        return selected("release");
     }
 
-    /** The command line that resumes the newest unfinished run with these flags; a resume reads no request. */
+    /**
+     * The command line that resumes the newest unfinished run with these flags; a resume reads no request, and its
+     * dependents are the run's own.
+     */
     public String resumeCommandLine() {
-        List<String> words = new ArrayList<>(List.of("sluice", "--resume"));
+        List<String> words = new ArrayList<>(List.of("sluice", "resume"));
         flags(words);
-        words.add("--execute");
+        return String.join(" ", words);
+    }
+
+    private String selected(String verb) {
+        List<String> words = new ArrayList<>(List.of("sluice", verb));
+        all.ifPresent(level -> words.addAll(List.of("--all", level.spelling())));
+        moduleArgs().forEach(arg -> words.addAll(List.of("--module", arg)));
+        if (dependents != DependentsFlag.CONFIG) {
+            words.add(dependents.flag());
+        }
+        flags(words);
         return String.join(" ", words);
     }
 
     private void flags(List<String> words) {
-        if (dependents != DependentsFlag.CONFIG) {
-            words.add(dependents.flag());
-        }
         if (force) {
             words.add("--force");
         }

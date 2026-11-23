@@ -50,7 +50,7 @@ public final class PinsAtMainGate implements Gate {
                                     + pin.held().orElse("nothing readable") + " in " + ctx.said(pin.pin().file())
                                     + ", and " + edge.upstream() + " is at " + pin.upstreamVersion().orElseThrow()
                                     + " on " + branch,
-                            "     sluice --sync-pins --execute moves it."));
+                            "     sluice sync-pins moves and commits it (sluice sync-pins --dry-run says what it would)."));
                 }
             }
         }

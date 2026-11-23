@@ -51,7 +51,7 @@ class PinsAtMainGateTest {
         assertEquals(Status.REFUSED, verdict.status());
         assertTrue(verdict.line().contains("b pins a at 1.0.0 in b/pom.xml"), verdict.line());
         assertTrue(verdict.line().contains("a is at 1.0.1-SNAPSHOT on main"), verdict.line());
-        assertTrue(verdict.refusal().contains("--sync-pins"), verdict.refusal());
+        assertTrue(verdict.refusal().contains("sluice sync-pins"), verdict.refusal());
     }
 
     @Test

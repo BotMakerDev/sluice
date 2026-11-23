@@ -3,30 +3,20 @@
 
 package com.botmaker.sluice.cli;
 
-import com.botmaker.sluice.Level;
 import com.botmaker.sluice.Refusal;
-import com.botmaker.sluice.decide.Dependents;
-import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.execute.Release;
-import com.botmaker.sluice.execute.Release.Options;
-import com.botmaker.sluice.execute.Release.Outcome;
-import com.botmaker.sluice.execute.Release.Saved;
-import com.botmaker.sluice.execute.ReleaseState;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.IVersionProvider;
 import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Model.OptionSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ParameterException;
 import picocli.CommandLine.Spec;
 
 import java.io.PrintWriter;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -35,19 +25,19 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
- * The {@code sluice} command: a release, its preview, a resume, a pin sync, a state, or the graph. Exit codes: 0
- * done or previewed clean, 1 refused, 2 stopped partway (resumable), 3 usage.
+ * The {@code sluice} command: a verb, then its flags. Exit codes: 0 done or previewed clean, 1 refused, 2 stopped
+ * partway (resumable), 3 usage.
  */
 @Command(name = "sluice", mixinStandardHelpOptions = true, versionProvider = Main.ManifestVersion.class,
-        subcommands = GraphCommand.class, sortOptions = false,
-        description = {
-            "Release a Maven project split over the git submodules of one umbrella: each module tagged in "
-                    + "dependency order, its dependents' pins moved, every module back on its next snapshot.",
-            "Previews unless --execute is given. A module's alias in sluice.yml is a flag too: --sdk 1.10.0."},
+        subcommands = {Commands.Preview.class, Commands.Cut.class, Commands.Why.class, Commands.Resume.class,
+            Commands.Status.class, Commands.SyncPins.class, GraphCommand.class},
+        description = "Release a Maven project split over the git submodules of one umbrella: each module tagged in "
+                + "dependency order, its dependents' pins moved, every module back on its next snapshot.",
         exitCodeListHeading = "%nExit codes:%n",
-        exitCodeList = {"0:done, or previewed clean", "1:refused", "2:stopped partway (--resume goes on)",
+        exitCodeList = {"0:done, or previewed clean", "1:refused", "2:stopped partway (sluice resume goes on)",
             "3:usage"})
 public final class Main implements Callable<Integer> {
 
@@ -66,43 +56,6 @@ public final class Main implements Callable<Integer> {
 
     @Option(names = "--umbrella", paramLabel = "DIR", description = "The umbrella repository (default: here).")
     private Path umbrella = Path.of("");
-
-    @Option(names = "--all", paramLabel = "LEVEL", description = "Release every changed module: patch, minor, major.")
-    private String all;
-
-    @Option(names = "--module", paramLabel = "NAME[=VERSION|LEVEL]",
-            description = "Release one module, by its path, alias or artifactId. Repeatable.")
-    private List<String> modules = new ArrayList<>();
-
-    @Option(names = "--with-dependents", description = "Also release, at a patch, every dependent a release owes, "
-            + "though sluice.yml says owed: refuse (without it, owed: release does so already).")
-    private boolean withDependents;
-
-    @Option(names = "--no-dependents", description = "Release only what is named: a dependent a release owes keeps "
-            + "its released pins, its branch's pin follows.")
-    private boolean noDependents;
-
-    @Option(names = "--force", description = "Go on past a refused gate (never past one that could not run).")
-    private boolean force;
-
-    @Option(names = "--execute", description = "Release, rather than preview.")
-    private boolean execute;
-
-    @Option(names = "--no-wait", description = "Do not wait for a publish a later module resolves from.")
-    private boolean noWait;
-
-    @Option(names = "--why", description = "Say why each module is released or left.")
-    private boolean why;
-
-    @Option(names = "--resume", description = "Go on with the newest run that stopped partway.")
-    private boolean resume;
-
-    @Option(names = "--sync-pins", description = "Move every pin to its upstream's version on the branch.")
-    private boolean syncPins;
-
-    @Option(names = "--status", arity = "0..1", paramLabel = "FILE", fallbackValue = "",
-            description = "Print a run's state: FILE, or the newest under releases/.")
-    private String status;
 
     Main(Engine engine) {
         this.engine = engine;
@@ -134,13 +87,21 @@ public final class Main implements Callable<Integer> {
             err.println("sluice failed: " + e);
             e.printStackTrace(err);
             err.flush();
-            return failed.getCommand() instanceof Main main && main.execute ? STOPPED : REFUSED;
+            return failed.getCommand() instanceof Commands.Writing writing && writing.writes() ? STOPPED : REFUSED;
         });
-        Set<String> own = line.getCommandSpec().optionsMap().keySet();
-        int code = line.execute(Aliases.expand(Arrays.asList(args), own).toArray(String[]::new));
+        int code = line.execute(Aliases.expand(Arrays.asList(args), options(line, args)).toArray(String[]::new));
         out.flush();
         err.flush();
         return code;
+    }
+
+    /** The option names sluice has itself, before the verb and on the verb named: an alias never shadows one. */
+    private static Set<String> options(CommandLine line, String[] args) {
+        Stream<CommandLine> verb = Arrays.stream(args).filter(line.getSubcommands()::containsKey).limit(1)
+                .map(line.getSubcommands()::get);
+        return Stream.concat(Stream.of(line), verb)
+                .flatMap(command -> command.getCommandSpec().options().stream())
+                .map(OptionSpec::names).flatMap(Arrays::stream).collect(Collectors.toSet());
     }
 
     private static int usage(ParameterException e, PrintWriter err) {
@@ -150,77 +111,24 @@ public final class Main implements Callable<Integer> {
         return USAGE;
     }
 
-    /** The umbrella as an absolute path, so every module's directory under it is one too. */
+    /** The {@code Main} a verb runs under. */
+    static Main of(CommandSpec verb) {
+        return (Main) verb.root().userObject();
+    }
+
+    Engine engine() {
+        return engine;
+    }
+
+    /** The umbrella {@code --umbrella} before the verb names, as an absolute path. */
     Path umbrella() {
         return umbrella.toAbsolutePath().normalize();
     }
 
     @Override
     public Integer call() {
-        boolean releasing = all != null || !modules.isEmpty();
-        long modes = List.of(releasing, resume, syncPins, status != null).stream().filter(b -> b).count();
-        if (modes != 1) {
-            throw new ParameterException(spec.commandLine(), modes == 0
-                    ? "say what to do: --all LEVEL, --module NAME, --resume, --sync-pins, --status or graph"
-                    : "--all/--module, --resume, --sync-pins and --status go one at a time");
-        }
-        String mode = status != null ? "--status" : syncPins ? "--sync-pins" : resume ? "--resume" : "";
-        unused(mode, "--execute", execute && status != null);
-        unused(mode, "--force", force && (status != null || syncPins));
-        if (withDependents && noDependents) {
-            throw new ParameterException(spec.commandLine(), "--with-dependents and --no-dependents: say one");
-        }
-        unused(mode, "--with-dependents", withDependents && !mode.isEmpty());
-        unused(mode, "--no-dependents", noDependents && !mode.isEmpty());
-        unused(mode, "--no-wait", noWait && (status != null || syncPins));
-        unused(mode, "--why", why && (status != null || syncPins));
-        PrintWriter out = spec.commandLine().getOut();
-        Console console = new Console(out, why);
-        Optional<Dependents> dependents = withDependents ? Optional.of(Dependents.ADD)
-                : noDependents ? Optional.of(Dependents.LEAVE) : Optional.empty();
-        Options options = new Options(execute, force, dependents, !noWait);
-        if (status != null) {
-            Saved saved = Release.state(umbrella(), stateFile());
-            out.println(saved.file());
-            console.state(saved.state());
-            return saved.state().status() == ReleaseState.Status.DONE ? OK : STOPPED;
-        }
-        if (syncPins) {
-            // Not stoppable: each module's sync is one commit, quick, and nothing resumes it.
-            return code(engine.syncPins(umbrella(), execute, console));
-        }
-        return stoppable(out, stop -> {
-            Outcome outcome = resume
-                    ? engine.resume(umbrella(), options, stop::get, console)
-                    : engine.run(umbrella(), Requests.parse(modules, level()), options, stop::get, console);
-            console.ended(outcome);
-            return code(outcome.status());
-        });
-    }
-
-    /** A flag the chosen mode has no use for is a usage error, never silently dropped. */
-    private void unused(String mode, String flag, boolean given) {
-        if (given) {
-            throw new ParameterException(spec.commandLine(), flag + " does not apply to " + mode);
-        }
-    }
-
-    /** {@code --status FILE} as typed, else under the umbrella; empty for the newest. */
-    private Optional<Path> stateFile() {
-        if (status.isEmpty()) {
-            return Optional.empty();
-        }
-        Path typed = Path.of(status);
-        return Optional.of(Files.exists(typed) || typed.isAbsolute() ? typed : umbrella().resolve(typed));
-    }
-
-    private Optional<Level> level() {
-        if (all == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Level.of(all).orElseThrow(() -> new ParameterException(spec.commandLine(),
-                "--all " + all + ": write " + Arrays.stream(Level.values()).map(Level::spelling)
-                        .collect(Collectors.joining(", ")))));
+        throw new ParameterException(spec.commandLine(),
+                "say what to do: preview, release, why, resume, status, sync-pins or graph");
     }
 
     /**
@@ -228,7 +136,7 @@ public final class Main implements Callable<Integer> {
      * while for it to say so, so the run ends resumable rather than killed mid-step, then ends the program with
      * the run's own code (2 when it stopped), not the signal's.
      */
-    private static int stoppable(PrintWriter out, Function<AtomicBoolean, Integer> work) {
+    static int stoppable(PrintWriter out, Function<AtomicBoolean, Integer> work) {
         AtomicBoolean stop = new AtomicBoolean();
         AtomicInteger code = new AtomicInteger(STOPPED);
         CountDownLatch finished = new CountDownLatch(1);
@@ -257,7 +165,7 @@ public final class Main implements Callable<Integer> {
         }
     }
 
-    private static int code(Release.Status status) {
+    static int code(Release.Status status) {
         return switch (status) {
             case DONE, PREVIEWED -> OK;
             case REFUSED -> REFUSED;

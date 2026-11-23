@@ -12,6 +12,12 @@ All notable changes to this project are documented here, in the format of
 
 ### Changed
 
+- **sluice takes a verb**: `sluice preview`, `release`, `why`, `resume [--dry-run]`, `status [FILE]`,
+  `sync-pins [--dry-run]` and `graph`, each with only the flags it uses (`sluice <verb> --help`). `--execute`,
+  `--resume`, `--status`, `--sync-pins` and `--why` are gone: `sluice --all patch --execute` is now
+  `sluice release --all patch`, a preview is `sluice preview`, and `--why` is `sluice why`, a preview (a release
+  prints no reasons now). `sync-pins` commits unless `--dry-run`. `--module`, a module's alias flag and `--umbrella` stay.
+  sluice-desktop's command lines follow, and its resume line no longer carries a dependents flag a resume refuses.
 - Core's tests run at once, and the release tests move a plain pom's versions without a Maven run (one end-to-end
   release and `PinMovesTest` keep the plugin under test): the core suite went from 983 s to about 20 s.
 
