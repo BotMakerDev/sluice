@@ -46,12 +46,47 @@ public final class PinMoves {
             Pattern.compile("(<parent>(?:(?!</parent>)[\\s\\S])*?<version>)\\s*[^<]*?\\s*(</version>)");
 
     private final Runner runner;
-    private final List<String> mavenArgs;
+    private final Goals goals;
 
     /** @param mavenArgs arguments every Maven run gets before its goal: {@code -o}, a settings file */
     public PinMoves(Runner runner, List<String> mavenArgs) {
+        this(runner, Goals.maven(runner, mavenArgs));
+    }
+
+    /** @param goals how each {@code versions-maven-plugin} goal is carried out */
+    public PinMoves(Runner runner, Goals goals) {
         this.runner = runner;
-        this.mavenArgs = List.copyOf(mavenArgs);
+        this.goals = goals;
+    }
+
+    /**
+     * How one {@code versions-maven-plugin} goal is carried out on a pom: by Maven ({@link #maven}), or by a stand-in
+     * a test gives, which must make the same edit through the same {@link Runner}. Each move is read back either way.
+     */
+    @FunctionalInterface
+    public interface Goals {
+
+        /** @param properties the goal's {@code -Dname=value} arguments */
+        void run(Path pom, String goal, List<String> properties);
+
+        /** Each goal a Maven run of its own. */
+        static Goals maven(Runner runner, List<String> mavenArgs) {
+            List<String> args = List.copyOf(mavenArgs);
+            return (pom, goal, properties) -> {
+                List<String> argv = new ArrayList<>(List.of("mvn", "-B", "-q"));
+                argv.addAll(args);
+                argv.addAll(List.of("-f", pom.toString(), PLUGIN + ":" + goal));
+                argv.addAll(properties);
+                Proc.Result result = runner.run(pom.toAbsolutePath().getParent(), argv,
+                        mavenEnv(Optional.ofNullable(System.getenv("MAVEN_OPTS"))));
+                if (!result.ok()) {
+                    String errors = String.join("\n", result.out().lines()
+                            .filter(line -> line.contains("[ERROR]")).limit(10).toList());
+                    throw new Refusal(pom + ": versions:" + goal + " failed\n"
+                            + (errors.isEmpty() ? result.out().strip() : errors));
+                }
+            };
+        }
     }
 
     /** The pom's own version, by {@code versions:set}, which moves each module of a multi-module pom with it. */
@@ -106,17 +141,6 @@ public final class PinMoves {
     }
 
     private void mvn(Path pom, String goal, String... properties) {
-        List<String> argv = new ArrayList<>(List.of("mvn", "-B", "-q"));
-        argv.addAll(mavenArgs);
-        argv.addAll(List.of("-f", pom.toString(), PLUGIN + ":" + goal));
-        argv.addAll(List.of(properties));
-        Proc.Result result = runner.run(pom.toAbsolutePath().getParent(), argv,
-                mavenEnv(Optional.ofNullable(System.getenv("MAVEN_OPTS"))));
-        if (!result.ok()) {
-            String errors = String.join("\n", result.out().lines().filter(line -> line.contains("[ERROR]"))
-                    .limit(10).toList());
-            throw new Refusal(pom + ": versions:" + goal + " failed\n"
-                    + (errors.isEmpty() ? result.out().strip() : errors));
-        }
+        goals.run(pom, goal, List.of(properties));
     }
 }

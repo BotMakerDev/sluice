@@ -130,11 +130,12 @@ public final class Release {
 
     /** What a run reaches outside itself, so a test can put local stand-ins there. */
     record Wiring(Function<Config, Function<Module, PublishTarget>> targets, Supplier<Optional<GitHub>> github,
-                  Function<BooleanSupplier, Sleeper> sleeper, List<String> mavenArgs, Clock clock,
+                  Function<BooleanSupplier, Sleeper> sleeper, Function<Runner, PinMoves.Goals> goals, Clock clock,
                   AssetPins.Fetch fetch, Function<Function<Module, PublishTarget>, AtPins> atPins) {
 
         static Wiring real() {
-            return new Wiring(Targets::of, GitHub::fromEnvironment, Sleeper::real, List.of(),
+            return new Wiring(Targets::of, GitHub::fromEnvironment, Sleeper::real,
+                    runner -> PinMoves.Goals.maven(runner, List.of()),
                     Clock.systemDefaultZone(), AssetPins.Fetch.real(), targets -> new BuildsAtPinsGate(targets,
                             List.of(), Optional.of(BuildsAtPinsGate.lastingRepository()))::build);
         }
@@ -351,7 +352,7 @@ public final class Release {
     }
 
     private static Synced sync(Graph graph, Runner runner, Wiring wiring, Predicate<Module> which) {
-        PinMoves moves = new PinMoves(runner, wiring.mavenArgs());
+        PinMoves moves = new PinMoves(runner, wiring.goals().apply(runner));
         boolean all = true;
         List<Module> moved = new ArrayList<>();
         for (Module module : graph.modules()) {
@@ -435,7 +436,7 @@ public final class Release {
                 log.line(line);
                 events.accept(new Event.Line(line));
             }, stop);
-            this.moves = new PinMoves(runner, wiring.mavenArgs());
+            this.moves = new PinMoves(runner, wiring.goals().apply(runner));
             this.steps = new StepRunner(config);
             this.targets = wiring.targets().apply(config);
             this.github = wiring.github().get();

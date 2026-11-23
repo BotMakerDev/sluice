@@ -3,6 +3,8 @@
 
 package com.botmaker.sluice.execute;
 
+import com.botmaker.sluice.PinMoves.Goals;
+import com.botmaker.sluice.Runner;
 import com.botmaker.sluice.Spelling;
 import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.execute.Release.Options;
@@ -12,6 +14,7 @@ import com.botmaker.sluice.model.Coordinate;
 import com.botmaker.sluice.spi.PublishTarget;
 import com.botmaker.sluice.testing.FixtureUmbrella;
 import com.botmaker.sluice.testing.GateFixture.FixedTarget;
+import com.botmaker.sluice.testing.PlainGoals;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -57,8 +60,24 @@ final class ReleaseFixture {
 
     /** The same, each build at the pins {@code atPins}'s. */
     static Wiring wiring(PublishTarget target, AssetPins.Fetch assets, Release.AtPins atPins) {
-        return new Wiring(config -> module -> target, Optional::empty, stop -> duration -> true, List.of("-o"),
+        return new Wiring(config -> module -> target, Optional::empty, stop -> duration -> true, ReleaseFixture::plain,
                 CLOCK, assets, targets -> atPins);
+    }
+
+    /** Versions moved as a plain pom's edit, Maven (offline) for the rest: {@link PlainGoals}. */
+    static Goals plain(Runner runner) {
+        return new PlainGoals(runner, maven(runner));
+    }
+
+    /** Every versions goal a Maven run, offline: for the release that keeps the plugin itself under test. */
+    static Goals maven(Runner runner) {
+        return Goals.maven(runner, List.of("-o"));
+    }
+
+    /** {@code wiring}, its versions moved by Maven itself. */
+    static Wiring byMaven(Wiring wiring) {
+        return new Wiring(wiring.targets(), wiring.github(), wiring.sleeper(), ReleaseFixture::maven, wiring.clock(),
+                wiring.fetch(), wiring.atPins());
     }
 
     /** Release assets by url, each the bytes it serves. */

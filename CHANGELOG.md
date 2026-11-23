@@ -3,6 +3,18 @@
 All notable changes to this project are documented here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `PinMoves.Goals`: a caller replaces how `versions:set` and `versions:set-property` run (`Goals.maven` the default).
+  `Release.Wiring` takes one in place of its Maven arguments.
+
+### Changed
+
+- Core's tests run at once, and the release tests move a plain pom's versions without a Maven run (one end-to-end
+  release and `PinMovesTest` keep the plugin under test): the core suite went from 983 s to about 20 s.
+
 ## [0.4.2] — 2026-11-23
 
 ### Changed

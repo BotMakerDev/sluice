@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static com.botmaker.sluice.execute.ReleaseFixture.EXECUTE;
+import static com.botmaker.sluice.execute.ReleaseFixture.byMaven;
 import static com.botmaker.sluice.execute.ReleaseFixture.PREVIEW;
 import static com.botmaker.sluice.execute.ReleaseFixture.config;
 import static com.botmaker.sluice.execute.ReleaseFixture.lines;
@@ -75,7 +76,8 @@ class ReleaseTest {
         List<String> lines = lines();
         String umbrellaHead = FixtureUmbrella.git(umbrella.root(), "rev-parse", "HEAD").out().strip();
 
-        Outcome outcome = run(umbrella, EXECUTE, served(), lines, "a", "b");
+        // The one release whose versions move by the plugin itself: the rest use PlainGoals.
+        Outcome outcome = run(umbrella, EXECUTE, byMaven(wiring(served())), lines, "a", "b");
 
         assertEquals(Status.DONE, outcome.status(), String.join("\n", lines));
         assertTrue(tags(umbrella, "a").contains("v1.0.1"));
@@ -230,7 +232,7 @@ class ReleaseTest {
                 .commit("c", "src/C.java", "class C {}\n").push("c");
         PublishTarget notYet = new FixedTarget(Spelling.TAG, Optional.empty(), PublishTarget.Served.NO);
         Wiring wiring = new Wiring(config -> module -> module.name().equals("a") ? notYet : served(),
-                Optional::empty, stop -> duration -> true, List.of("-o"), ReleaseFixture.CLOCK, Assets.NONE,
+                Optional::empty, stop -> duration -> true, ReleaseFixture::plain, ReleaseFixture.CLOCK, Assets.NONE,
                 targets -> (module, pins, graph) -> Optional.empty());
         List<String> lines = lines();
 

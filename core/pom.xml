@@ -36,6 +36,20 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Tests run at once: each builds its own umbrella in a @TempDir and waits on child git and
+                         mvn, sharing nothing but a read-only ~/.m2. Set here, not in junit-platform.properties: the
+                         desktop's tests see core's test classes, and its FX toolkit starts once. -->
+                    <properties>
+                        <configurationParameters>
+                            junit.jupiter.execution.parallel.enabled=true
+                            junit.jupiter.execution.parallel.mode.default=concurrent
+                            junit.jupiter.execution.parallel.mode.classes.default=concurrent
+                            junit.jupiter.execution.parallel.config.strategy=dynamic
+                            junit.jupiter.execution.parallel.config.dynamic.factor=1
+                        </configurationParameters>
+                    </properties>
+                </configuration>
             </plugin>
             <!-- The test fixtures (FixtureUmbrella, ReleaseFixture) as a jar, for the other modules' tests. -->
             <plugin>
