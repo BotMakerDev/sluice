@@ -93,6 +93,11 @@
                         <systemPropertyVariables>
                             <sluice.test.repository>${settings.localRepository}</sluice.test.repository>
                         </systemPropertyVariables>
+                        <!-- The mvn a test starts lives a few seconds: the quick compiler and the serial collector
+                             start it sooner, and tests run at once (junit-platform.properties) share the cores. -->
+                        <environmentVariables>
+                            <MAVEN_OPTS>-XX:TieredStopAtLevel=1 -XX:+UseSerialGC</MAVEN_OPTS>
+                        </environmentVariables>
                     </configuration>
                 </plugin>
                 <!-- 3.3.0, not newer: 3.4.0 needs Maven 3.6.3. -->
