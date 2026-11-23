@@ -19,6 +19,7 @@ import com.botmaker.sluice.spi.GateContext;
 import com.botmaker.sluice.spi.PublishTarget;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -90,6 +91,12 @@ public final class GateFixture {
         @Override
         public Served serves(Coordinate coordinate, String version) {
             return served;
+        }
+
+        /** None: a wait's deadline is real time, and a test's sleeper returns at once, so one not served spins. */
+        @Override
+        public Duration patience() {
+            return Duration.ZERO;
         }
     }
 }
