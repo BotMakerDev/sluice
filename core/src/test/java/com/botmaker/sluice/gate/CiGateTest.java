@@ -131,17 +131,62 @@ class CiGateTest {
         Run greenAfter = new Run("ci", "completed", "success", "https://example.invalid/11", "9999999999", "",
                 "2026-11-10T04:00:00Z");
 
-        GateVerdict named = only(check(new CiGate(Optional.of((repo, branch) -> Optional.of(
+        GateVerdict previewed = only(check(new CiGate(Optional.of((repo, branch) -> Optional.of(
                 repo.name().equals("a") ? List.of(greenAfter) : List.of(failed))),
                 module -> Optional.of(new Repo("owner", module.name()))), two, Config.defaults(), "b"));
         GateVerdict notNamed = only(check(new CiGate(Optional.of((repo, branch) -> Optional.of(
                 repo.name().equals("a") ? List.of(greenBefore) : List.of(failed))),
                 module -> Optional.of(new Repo("owner", module.name()))), two, Config.defaults(), "b"));
+        // GitHub refuses the rerun: the refusal names the upstream and why.
+        GateVerdict named = only(new CiGate(Optional.of((repo, branch) -> Optional.of(
+                repo.name().equals("a") ? List.of(greenAfter) : List.of(failed))),
+                module -> Optional.of(new Repo("owner", module.name())), Optional.of(d -> true))
+                .check(executing(GateFixture.context(two, Config.defaults(), false, "b"))));
 
+        assertEquals(Status.SKIPPED, previewed.status());
+        assertTrue(previewed.line().contains("a run reruns its failed jobs and waits up to 20 min"), previewed.line());
         assertEquals(Status.REFUSED, named.status());
         assertTrue(named.refusal().contains("a went green after it, at 9999999: if it failed in a's build, rerun it"),
                 named.refusal());
+        assertTrue(named.refusal().contains("Its rerun was refused: this GitHub client reruns nothing"),
+                named.refusal());
         assertFalse(notNamed.refusal().contains("went green"), notNamed.refusal());
+    }
+
+    @Test
+    void aRunRerunsARedRunAnUpstreamFixedAndWaitsForIt() {
+        FixtureUmbrella two = FixtureUmbrella.create(tmp.resolve("two"))
+                .module("a", pom("a", "1.0.0-SNAPSHOT", ""))
+                .module("b", pom("b", "0.1.0-SNAPSHOT", "  <properties><a.version>1.0.0-SNAPSHOT</a.version>"
+                        + "</properties>\n" + dep("a", "${a.version}")));
+        String head = Git.line(two.dir("b"), "rev-parse", "HEAD").orElseThrow();
+        String url = "https://github.com/owner/b/actions/runs/77";
+        Run failed = new Run("ci", "completed", "failure", url, head, "", "2026-11-10T03:20:00Z");
+        Run rerunning = new Run("ci", "in_progress", "", url, head, "", "2026-11-10T05:00:00Z");
+        Run passed = new Run("ci", "completed", "success", url, head, "", "2026-11-10T05:10:00Z");
+        Run greenAfter = new Run("ci", "completed", "success", "u", "9999999999", "", "2026-11-10T04:00:00Z");
+        List<List<Run>> answers = new ArrayList<>(List.of(List.of(failed), List.of(rerunning), List.of(passed)));
+        List<String> reran = new ArrayList<>();
+        GitHub github = new GitHub() {
+            @Override
+            public Optional<List<Run>> runs(Repo repo, String branch) {
+                return Optional.of(repo.name().equals("a") ? List.of(greenAfter)
+                        : answers.size() > 1 ? answers.removeFirst() : answers.getFirst());
+            }
+
+            @Override
+            public Optional<String> rerunFailed(Repo repo, Run run) {
+                reran.add(repo + " " + run.id().orElseThrow());
+                return Optional.empty();
+            }
+        };
+
+        GateVerdict verdict = only(new CiGate(Optional.of(github), module -> Optional.of(new Repo("owner",
+                module.name())), Optional.of(d -> true))
+                .check(executing(GateFixture.context(two, Config.defaults(), false, "b"))));
+
+        assertEquals(List.of("owner/b 77"), reran);
+        assertEquals(Status.OK, verdict.status(), verdict.refusal());
     }
 
     @Test

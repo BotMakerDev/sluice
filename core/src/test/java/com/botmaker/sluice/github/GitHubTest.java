@@ -46,6 +46,16 @@ class GitHubTest {
     }
 
     @Test
+    void runIdReadFromItsUrl() {
+        assertEquals(Optional.of(19341234567L),
+                new GitHub.Run("ci", "completed", "failure", "https://github.com/o/r/actions/runs/19341234567", "s")
+                        .id());
+        assertEquals(Optional.of(5L),
+                new GitHub.Run("ci", "", "", "https://github.com/o/r/actions/runs/5/attempts/2", "s").id());
+        assertEquals(Optional.empty(), new GitHub.Run("ci", "", "", "https://example.invalid/2", "s").id());
+    }
+
+    @Test
     void answerThatIsNotRunsHoldsNone() {
         assertEquals(List.of(), GitHubRest.runs("{\"message\": \"Not Found\"}"));
         assertEquals(List.of(), GitHubRest.runs("<html>"));

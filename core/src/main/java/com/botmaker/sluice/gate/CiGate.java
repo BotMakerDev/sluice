@@ -38,6 +38,7 @@ import java.util.stream.Stream;
  * <p><b>A run does not leave CI unchecked when it can wait for it</b>: a module ahead of its origin is pushed
  * first (the release would push it anyway, untested), then the gate waits, up to {@code ci-wait}, for a finished
  * run of each workflow on its {@code HEAD}. A preview pushes nothing and waits for nothing: it says it would.
+ * A red run that failed before an upstream went green is rerun (its failed jobs) and waited on the same way.
  */
 public final class CiGate implements Gate {
 
@@ -116,11 +117,68 @@ public final class CiGate implements Gate {
                 asked.put(module, waitForHead(ctx, module, repo.get(), branch));
             }
             Optional<List<Run>> runs = runsOf.apply(module);
-            verdicts.add(runs.isEmpty()
-                    ? skipped(module + ": GitHub did not answer for " + repo.get() + ", CI was not checked")
-                    : verdict(ctx, module, branch, runs.get(), runsOf));
+            if (runs.isEmpty()) {
+                verdicts.add(skipped(module + ": GitHub did not answer for " + repo.get() + ", CI was not checked"));
+                continue;
+            }
+            GateVerdict verdict = verdict(ctx, module, branch, runs.get(), runsOf);
+            List<Run> rerun = failedInAnUpstream(ctx, module, runs.get(), runsOf);
+            if (verdict.status() == GateVerdict.Status.REFUSED && !rerun.isEmpty()) {
+                verdict = rerun(ctx, module, repo.get(), branch, rerun, verdict, asked, runsOf);
+            }
+            verdicts.add(verdict);
         }
         return verdicts;
+    }
+
+    /**
+     * The red runs of {@code module} an upstream went green after: its CI builds its upstreams' branches, so it
+     * may have failed in one fixed since. Empty when no upstream did.
+     */
+    private static List<Run> failedInAnUpstream(GateContext ctx, Module module, List<Run> runs,
+                                                Function<Module, Optional<List<Run>>> runsOf) {
+        List<Run> red = BranchRuns.of(runs, module.dir().dir()).red();
+        boolean upstreamGreen = !red.isEmpty() && ctx.graph().upstreams(module).stream()
+                .anyMatch(edge -> greenSince(edge.upstream(), red, runsOf).isPresent());
+        return upstreamGreen ? red : List.of();
+    }
+
+    /**
+     * Reruns {@code red}'s failed jobs and waits for them, up to {@code ci-wait}, then answers again from the
+     * branch's runs; a preview says it would. {@code refused} stands when GitHub does not take a rerun.
+     */
+    private GateVerdict rerun(GateContext ctx, Module module, Repo repo, String branch, List<Run> red,
+                              GateVerdict refused, Map<Module, Optional<List<Run>>> asked,
+                              Function<Module, Optional<List<Run>>> runsOf) {
+        if (ctx.runner().dryRun()) {
+            return skipped(module + ": its red CI run failed before an upstream went green: a run reruns its "
+                    + "failed jobs and waits up to " + ctx.config().ciWait().toMinutes() + " min; CI was not checked");
+        }
+        for (Run run : red) {
+            Optional<String> why = github.orElseThrow().rerunFailed(repo, run);
+            if (why.isPresent()) {
+                return new GateVerdict(refused.gate(), refused.status(), refused.line(),
+                        refused.refusal() + "\n     Its rerun was refused: " + why.get());
+            }
+            ctx.runner().say(module + ": reran the failed jobs of " + run.workflow() + " at " + run.commit());
+        }
+        Sleeper sleep = sleeper.orElseGet(() -> Sleeper.real(ctx.runner()::stopping));
+        long asks = ctx.config().ciWait().toSeconds() / EVERY.toSeconds();
+        // ci-wait 0: the rerun is started, and the branch answers as it is now.
+        Optional<List<Run>> runs = asks == 0 ? github.get().runs(repo, branch) : Optional.empty();
+        // GitHub queues a rerun under the run's own id: wait at least once, then until each is finished again.
+        for (long ask = 0; ask < asks && sleep.sleep(EVERY); ask++) {
+            runs = github.get().runs(repo, branch);
+            if (runs.isEmpty() || runs.get().stream().filter(run -> red.stream()
+                    .anyMatch(r -> r.url().equals(run.url()))).allMatch(Run::finished)) {
+                break;
+            }
+        }
+        if (runs.isEmpty()) {
+            return refused;
+        }
+        asked.put(module, runs);
+        return verdict(ctx, module, branch, runs.get(), runsOf);
     }
 
     /**

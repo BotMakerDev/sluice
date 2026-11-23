@@ -41,6 +41,25 @@ final class GitHubRest implements GitHub {
     }
 
     @Override
+    public Optional<String> rerunFailed(Repo repo, Run run) {
+        Optional<Long> id = run.id();
+        if (id.isEmpty()) {
+            return Optional.of("no run id in " + run.url());
+        }
+        HttpRequest request = request("/repos/" + repo.owner() + "/" + repo.name() + "/actions/runs/" + id.get()
+                + "/rerun-failed-jobs").POST(HttpRequest.BodyPublishers.noBody()).build();
+        try {
+            int status = http.send(request, HttpResponse.BodyHandlers.ofString()).statusCode();
+            return status == 201 ? Optional.empty() : Optional.of("GitHub answered " + status);
+        } catch (IOException e) {
+            return Optional.of("GitHub did not answer (" + e.getMessage() + ")");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Optional.of("interrupted");
+        }
+    }
+
+    @Override
     public Optional<String> release(Repo repo, String tag, String body) {
         String json = "{\"tag_name\": " + Json.quote(tag) + ", \"name\": " + Json.quote(tag) + ", \"body\": "
                 + Json.quote(body) + "}";

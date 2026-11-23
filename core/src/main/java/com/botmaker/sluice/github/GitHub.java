@@ -22,6 +22,9 @@ public interface GitHub {
     /** Where a repository keeps its own workflows. */
     String WORKFLOWS = ".github/workflows/";
 
+    /** A run's id in its url. */
+    Pattern RUN_ID = Pattern.compile("/actions/runs/(\\d+)(?:/|$)");
+
     /** A repository on GitHub. */
     record Repo(String owner, String name) {
 
@@ -85,6 +88,12 @@ public interface GitHub {
             return List.of("success", "skipped", "neutral").contains(conclusion);
         }
 
+        /** Its id, the last part of its {@code …/actions/runs/<id>} url; empty when the url holds none. */
+        public Optional<Long> id() {
+            Matcher matcher = RUN_ID.matcher(url);
+            return matcher.find() ? Optional.of(Long.parseLong(matcher.group(1))) : Optional.empty();
+        }
+
         /** Its commit, short. */
         public String commit() {
             return sha.length() > 7 ? sha.substring(0, 7) : sha;
@@ -134,6 +143,15 @@ public interface GitHub {
 
     /** The newest workflow runs on a branch, newest first; empty when GitHub could not be asked. */
     Optional<List<Run>> runs(Repo repo, String branch);
+
+    /**
+     * Reruns the failed jobs of {@code run}, as {@code gh run rerun --failed} does.
+     *
+     * @return empty when GitHub took it, else why not
+     */
+    default Optional<String> rerunFailed(Repo repo, Run run) {
+        return Optional.of("this GitHub client reruns nothing");
+    }
 
     /**
      * Creates the release page of {@code tag}, its notes {@code body}. A page the tag already has counts as
