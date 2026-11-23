@@ -12,6 +12,7 @@ import com.botmaker.sluice.Version;
 import com.botmaker.sluice.decide.Decision;
 import com.botmaker.sluice.model.Coordinate;
 import com.botmaker.sluice.model.Edge;
+import com.botmaker.sluice.model.Graph;
 import com.botmaker.sluice.model.Module;
 import com.botmaker.sluice.model.Pin;
 import com.botmaker.sluice.model.PomFile;
@@ -28,6 +29,8 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.TreeSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -56,15 +59,70 @@ public final class BuildsAtPinsGate implements Gate {
 
     private final Function<Module, PublishTarget> targets;
     private final List<String> mavenArgs;
+    private final Optional<Path> lasting;
 
+    /** A gate whose builds share a temporary local repository, deleted after the check. */
     public BuildsAtPinsGate(Function<Module, PublishTarget> targets) {
-        this(targets, List.of());
+        this(targets, List.of(), Optional.empty());
     }
 
     /** @param mavenArgs arguments every Maven run gets before its goal: a settings file */
     public BuildsAtPinsGate(Function<Module, PublishTarget> targets, List<String> mavenArgs) {
+        this(targets, mavenArgs, Optional.empty());
+    }
+
+    /**
+     * @param repository the local repository every check's builds share, kept between runs so a preview does not
+     *                   download every dependency again; never the developer's own. Before each check, every
+     *                   snapshot of the umbrella's groups and every failed download remembered of them is deleted
+     *                   from it: a build at the pins resolves releases only. Empty: a temporary one each check.
+     */
+    public BuildsAtPinsGate(Function<Module, PublishTarget> targets, List<String> mavenArgs,
+                            Optional<Path> repository) {
         this.targets = targets;
         this.mavenArgs = List.copyOf(mavenArgs);
+        this.lasting = repository;
+    }
+
+    /** The lasting repository of this computer's user: {@code sluice/repository} under their cache folder. */
+    public static Path lastingRepository() {
+        String home = System.getProperty("user.home");
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        Path cache;
+        if (os.contains("win")) {
+            cache = Optional.ofNullable(System.getenv("LOCALAPPDATA")).map(Path::of)
+                    .orElse(Path.of(home, "AppData", "Local"));
+        } else if (os.contains("mac")) {
+            cache = Path.of(home, "Library", "Caches");
+        } else {
+            cache = Optional.ofNullable(System.getenv("XDG_CACHE_HOME")).filter(dir -> !dir.isBlank())
+                    .map(Path::of).orElse(Path.of(home, ".cache"));
+        }
+        return cache.resolve("sluice").resolve("repository");
+    }
+
+    /**
+     * {@code repository} with every {@code -SNAPSHOT} version folder and every {@code .lastUpdated} file under the
+     * umbrella's modules' groups deleted.
+     */
+    static Path purged(Path repository, Graph graph) throws IOException {
+        Set<String> groups = new TreeSet<>();
+        graph.modules().forEach(module -> module.coordinate().ifPresent(c -> groups.add(c.groupId())));
+        for (String group : groups) {
+            Path dir = repository.resolve(group.replace('.', '/'));
+            if (!Files.isDirectory(dir)) {
+                continue;
+            }
+            List<Path> stale;
+            try (Stream<Path> walk = Files.walk(dir)) {
+                stale = walk.filter(path -> Files.isDirectory(path)
+                                ? path.getFileName().toString().endsWith("-SNAPSHOT")
+                                : path.getFileName().toString().endsWith(".lastUpdated"))
+                        .toList();
+            }
+            stale.forEach(BuildsAtPinsGate::delete);
+        }
+        return repository;
     }
 
     @Override
@@ -107,7 +165,9 @@ public final class BuildsAtPinsGate implements Gate {
                     continue;
                 }
                 if (repository == null) {
-                    repository = Files.createTempDirectory("sluice-repository-");
+                    repository = lasting.isPresent()
+                            ? purged(Files.createDirectories(lasting.get()), ctx.graph())
+                            : Files.createTempDirectory("sluice-repository-");
                 }
                 Optional<Proc.Result> built = compile(module, pins, repository);
                 verdicts.add(built.isPresent()
@@ -116,9 +176,9 @@ public final class BuildsAtPinsGate implements Gate {
                                 + "the build was stopped; not built at its pins"));
             }
         } catch (IOException e) {
-            verdicts.add(skipped("no temporary directory could be made (" + e.getMessage() + ")"));
+            verdicts.add(skipped("no build folder or local repository could be made (" + e.getMessage() + ")"));
         } finally {
-            if (repository != null) {
+            if (repository != null && lasting.isEmpty()) {
                 delete(repository);
             }
         }

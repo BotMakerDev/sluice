@@ -142,6 +142,26 @@ class JitpackTargetTest {
     }
 
     @Test
+    void prerequisitePropertyReadFromParentPoms() {
+        StubHttp http = new StubHttp()
+                .body(MavenPrerequisite.CENTRAL + COMPILER_POM,
+                        "<project><parent><groupId>org.apache.maven.plugins</groupId>"
+                                + "<artifactId>maven-plugins</artifactId><version>41</version></parent>"
+                                + "<prerequisites><maven>${mavenVersion}</maven></prerequisites></project>")
+                .body(MavenPrerequisite.CENTRAL + "org/apache/maven/plugins/maven-plugins/41/maven-plugins-41.pom",
+                        "<project><parent><groupId>org.apache.maven</groupId><artifactId>maven-parent</artifactId>"
+                                + "<version>41</version></parent><properties><other>1</other></properties></project>")
+                .body(MavenPrerequisite.CENTRAL + "org/apache/maven/maven-parent/41/maven-parent-41.pom",
+                        "<project><properties><mavenVersion>3.6.3</mavenVersion></properties></project>");
+
+        GateVerdict verdict = only(plugins("jitpack", http));
+
+        assertEquals(Status.REFUSED, verdict.status(), verdict.line());
+        assertTrue(verdict.refusal().contains("maven-compiler-plugin:3.13.0 requires Maven 3.6.3"),
+                verdict.refusal());
+    }
+
+    @Test
     void unreadablePrerequisiteSkipped() {
         GateVerdict verdict = only(plugins("jitpack", new StubHttp()));
 

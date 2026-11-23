@@ -96,6 +96,11 @@
       "type": "boolean",
       "description": "Whether each tag of a module on GitHub gets a release page, its changelog's notes.",
       "default": true
+    },
+    "owed": {
+      "enum": ["release", "refuse"],
+      "description": "What a run does, unless --with-dependents or --no-dependents says, with a dependent that pins a module it releases: release it at its next patch, or refuse the run until it is asked for.",
+      "default": "release"
     }
   },
   "definitions": {

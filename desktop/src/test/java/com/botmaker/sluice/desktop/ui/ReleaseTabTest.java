@@ -50,7 +50,8 @@ class ReleaseTabTest extends FxHeadless {
         public Release.Preview preview(Path root, ReleaseSpec spec) {
             previewed.add(spec);
             Umbrella read = Umbrella.open(root);
-            Plan plan = Decider.decide(read.graph(), read.config(), spec.requests(), spec.withDependents());
+            Plan plan = Decider.decide(read.graph(), read.config(), spec.requests(),
+                    spec.options(false).dependents(read.config()));
             return new Release.Preview(plan, verdicts);
         }
 

@@ -70,6 +70,8 @@ class SchemaTest {
                 values("#/definitions/module/properties/kind"));
         assertEquals(ids(StepPoint.values(), StepPoint::id), values("#/definitions/step/properties/at"));
         assertEquals(ids(Spelling.values(), Spelling::id), values("#/definitions/textPin/properties/spelled"));
+        assertEquals(ids(Owed.values(), Owed::id), values("#/properties/owed"));
+        accepted("#/properties/owed", v -> "owed: " + v);
 
         accepted("#/definitions/target/oneOf/0", v -> "target: " + v);
         accepted("#/definitions/module/properties/place/oneOf/0", v -> "modules: {a: {place: " + v + "}}");
@@ -86,6 +88,7 @@ class SchemaTest {
         assertEquals(defaults.tagPattern(), at("#/properties/tag").get("default"));
         assertEquals(defaults.relevanceIgnore(), at("#/properties/relevance/properties/ignore").get("default"));
         assertEquals(defaults.githubReleases(), at("#/properties/github-releases").get("default"));
+        assertEquals(defaults.owed().id(), at("#/properties/owed").get("default"));
     }
 
     /** The keys the loader's refusal of the unknown key {@code zz} in {@code yaml} lists. */

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -89,7 +90,9 @@ class LockTest {
     @Test
     void lockReleasedOnRefusal() throws Exception {
         FixtureUmbrella umbrella = pinned(tmp);
-        Files.writeString(umbrella.dir("a").resolve("dirty.txt"), "not committed\n");
+        // A tracked file changed: an untracked one alone is no refusal, and an owed dependent is now added.
+        Files.writeString(umbrella.dir("a").resolve("pom.xml"), "<!-- not committed -->\n",
+                StandardOpenOption.APPEND);
 
         assertEquals(Status.REFUSED, run(umbrella, EXECUTE, served(), lines(), "a").status());
 

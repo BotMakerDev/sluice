@@ -3,6 +3,26 @@
 All notable changes to this project are documented here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **A dependent a release owes is released at a patch, not refused.** Releasing `cli` alone, when `core` and
+  `studio` pin it, adds both at their next patch, as `--with-dependents` did. `sluice.yml`'s new `owed: refuse` keeps
+  the old gate; `--no-dependents` releases only what is named, the dependents keeping their released pins and their
+  branch's pin following the release. sluice-desktop's Release tab picks among the three (`owed: as sluice.yml`,
+  `--with-dependents`, `--no-dependents`) in place of the *--with-dependents* checkbox.
+- `builds-at-pins` builds in a lasting local repository, `sluice/repository` under the user's cache folder (never
+  `~/.m2`), instead of an empty temporary one each run, so a preview no longer downloads every dependency again.
+  Before each check every snapshot of the umbrella's groups, and every failed download remembered of them, is
+  deleted from it: a build at the pins still resolves releases only.
+
+### Fixed
+
+- The JitPack target's prerequisite check no longer skips a plugin whose `<prerequisites><maven>` is a property its
+  parent pom sets (`maven-surefire-plugin:3.2.5`'s `${mavenVersion}`): the property is read through its `<parent>`
+  poms, fetched as its own pom is.
+
 ## [0.4.1] — 2026-11-22
 
 ### Fixed

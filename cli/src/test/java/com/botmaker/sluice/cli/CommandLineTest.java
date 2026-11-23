@@ -54,8 +54,13 @@ class CommandLineTest {
         assertEquals(Main.OK, preview.code(), preview.toString());
         assertTrue(preview.out().contains("previewed"), preview.toString());
 
-        Ran refused = sluice(engine, umbrella, "--module", "a");
-        assertEquals(Main.REFUSED, refused.code(), refused.toString());
+        Ran owing = sluice(engine, umbrella, "--module", "a");
+        assertEquals(Main.OK, owing.code(), owing.toString());
+        assertTrue(owing.out().contains("b 0.1.0 -> 0.1.1") && owing.out().contains("c 0.2.0 -> 0.2.1"),
+                owing.toString());
+
+        Ran both = sluice(engine, umbrella, "--module", "a", "--with-dependents", "--no-dependents");
+        assertEquals(Main.USAGE, both.code(), both.toString());
 
         Ran unknown = sluice(engine, umbrella, "--module", "nope");
         assertEquals(Main.REFUSED, unknown.code(), unknown.toString());

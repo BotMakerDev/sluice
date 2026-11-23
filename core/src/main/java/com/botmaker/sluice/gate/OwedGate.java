@@ -29,7 +29,8 @@ public final class OwedGate implements Gate {
         return owed.stream()
                 .map(edge -> refused(edge.downstream() + " is owed a release: " + edge.upstream()
                                 + " releases, and it depends on it (" + edge.why() + ")",
-                        "     Add --module " + edge.downstream() + ", or --with-dependents for every owed one."))
+                        "     Add --module " + edge.downstream() + ", or --with-dependents for every owed one; "
+                                + "--no-dependents leaves one its branch's pin follows."))
                 .toList();
     }
 }

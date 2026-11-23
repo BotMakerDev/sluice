@@ -39,7 +39,7 @@ public final class Gates {
                 new TextPinGate(), new ChangelogGate(), new CiGate(github), new PinsResolveGate(targets),
                 new TargetGate(targets)));
         config.gates().forEach(command -> gates.add(new CommandGate(command)));
-        gates.add(new BuildsAtPinsGate(targets));
+        gates.add(new BuildsAtPinsGate(targets, List.of(), Optional.of(BuildsAtPinsGate.lastingRepository())));
         return List.copyOf(gates);
     }
 

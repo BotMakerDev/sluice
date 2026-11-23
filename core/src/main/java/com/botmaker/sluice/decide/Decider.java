@@ -29,19 +29,24 @@ import java.util.stream.Collectors;
  *   <li>Asked for by number: released at that number, changed or not.</li>
  *   <li>Asked for by level, by name or by {@code --all}: released when it changed or is owed; skipped, with the
  *       reason, when a tag would publish what the last one did.</li>
- *   <li>Owed and not asked for: listed as owed, for a gate to refuse; {@code withDependents} releases it at its
- *       next patch instead.</li>
+ *   <li>Owed and not asked for: as {@code dependents} says, released at its next patch ({@link Dependents#ADD}),
+ *       left with its branch's pin following ({@link Dependents#LEAVE}), or listed as owed for a gate to refuse
+ *       ({@link Dependents#LIST}).</li>
  * </ul>
  */
 public final class Decider {
 
     private static final String SNAPSHOT = "-SNAPSHOT";
+    /** How the reason of a dependent released only because a release owes it begins. */
+    public static final String ADDED = "added, ";
+    /** How the reason of an owed dependent {@link Dependents#LEAVE} left begins. */
+    public static final String LEFT = "left, ";
 
     private Decider() {
     }
 
     /** The plan for {@code requests} over {@code graph}. Reads each module's tags (fetching them) and changes. */
-    public static Plan decide(Graph graph, Config config, Requests requests, boolean withDependents) {
+    public static Plan decide(Graph graph, Config config, Requests requests, Dependents dependents) {
         Map<Module, Request> named = requests.resolve(graph);
         Map<Module, Optional<Version>> newest = new HashMap<>();
         Changes changes = new Changes(graph, config,
@@ -79,9 +84,13 @@ public final class Decider {
                 reason = change.kind().releasable() ? change.why() : owedBy(owed, releasing);
             } else if (request.isPresent()) {
                 reason = change.why() + ": a tag would publish the same artifact";
-            } else if (!owed.isEmpty() && withDependents) {
+            } else if (!owed.isEmpty() && dependents == Dependents.ADD) {
                 release = Optional.of(next(module, newest.get(module), Level.PATCH));
-                reason = "added, " + owedBy(owed, releasing);
+                reason = ADDED + owedBy(owed, releasing);
+            } else if (!owed.isEmpty() && dependents == Dependents.LEAVE
+                    && owed.stream().allMatch(Edge::pinnedInAPom)) {
+                // Only a pom pin follows on the branch; a text pin or a declared edge would be left stale unsaid.
+                reason = LEFT + owedBy(owed, releasing) + "; its branch's pin follows";
             } else if (!owed.isEmpty()) {
                 owedUnrequested.addAll(owed);
                 reason = "not requested, " + owedBy(owed, releasing);

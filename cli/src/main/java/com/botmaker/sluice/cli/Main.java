@@ -5,6 +5,7 @@ package com.botmaker.sluice.cli;
 
 import com.botmaker.sluice.Level;
 import com.botmaker.sluice.Refusal;
+import com.botmaker.sluice.decide.Dependents;
 import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.execute.Release;
 import com.botmaker.sluice.execute.Release.Options;
@@ -73,8 +74,13 @@ public final class Main implements Callable<Integer> {
             description = "Release one module, by its path, alias or artifactId. Repeatable.")
     private List<String> modules = new ArrayList<>();
 
-    @Option(names = "--with-dependents", description = "Also release, at a patch, every dependent a release owes.")
+    @Option(names = "--with-dependents", description = "Also release, at a patch, every dependent a release owes, "
+            + "though sluice.yml says owed: refuse (without it, owed: release does so already).")
     private boolean withDependents;
+
+    @Option(names = "--no-dependents", description = "Release only what is named: a dependent a release owes keeps "
+            + "its released pins, its branch's pin follows.")
+    private boolean noDependents;
 
     @Option(names = "--force", description = "Go on past a refused gate (never past one that could not run).")
     private boolean force;
@@ -161,12 +167,18 @@ public final class Main implements Callable<Integer> {
         String mode = status != null ? "--status" : syncPins ? "--sync-pins" : resume ? "--resume" : "";
         unused(mode, "--execute", execute && status != null);
         unused(mode, "--force", force && (status != null || syncPins));
+        if (withDependents && noDependents) {
+            throw new ParameterException(spec.commandLine(), "--with-dependents and --no-dependents: say one");
+        }
         unused(mode, "--with-dependents", withDependents && !mode.isEmpty());
+        unused(mode, "--no-dependents", noDependents && !mode.isEmpty());
         unused(mode, "--no-wait", noWait && (status != null || syncPins));
         unused(mode, "--why", why && (status != null || syncPins));
         PrintWriter out = spec.commandLine().getOut();
         Console console = new Console(out, why);
-        Options options = new Options(execute, force, withDependents, !noWait);
+        Optional<Dependents> dependents = withDependents ? Optional.of(Dependents.ADD)
+                : noDependents ? Optional.of(Dependents.LEAVE) : Optional.empty();
+        Options options = new Options(execute, force, dependents, !noWait);
         if (status != null) {
             Saved saved = Release.state(umbrella(), stateFile());
             out.println(saved.file());

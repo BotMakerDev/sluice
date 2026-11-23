@@ -9,6 +9,7 @@ import com.botmaker.sluice.desktop.model.Io;
 import com.botmaker.sluice.desktop.model.Links;
 import com.botmaker.sluice.desktop.model.ReleaseProgress;
 import com.botmaker.sluice.desktop.model.ReleaseSpec;
+import com.botmaker.sluice.desktop.model.ReleaseSpec.DependentsFlag;
 import com.botmaker.sluice.desktop.model.ReleaseWatch;
 import com.botmaker.sluice.desktop.model.Umbrella;
 import com.botmaker.sluice.desktop.ui.widgets.LiveBadge;
@@ -71,7 +72,7 @@ public final class ReleaseTab extends BorderPane {
     private final CheckBox all = new CheckBox("--all");
     private final ComboBox<Level> level = new ComboBox<>();
     private final CheckBox force = new CheckBox("--force");
-    private final CheckBox withDependents = new CheckBox("--with-dependents");
+    private final ComboBox<DependentsFlag> dependents = new ComboBox<>();
     private final CheckBox noWait = new CheckBox("--no-wait");
     private final TableView<Row> table = new TableView<>();
     private final Label commandLine = new Label();
@@ -128,11 +129,14 @@ public final class ReleaseTab extends BorderPane {
             specChanged();
         });
         level.valueProperty().addListener((o, was, is) -> specChanged());
-        for (CheckBox box : List.of(force, withDependents, noWait)) {
+        dependents.getItems().setAll(DependentsFlag.values());
+        dependents.setValue(DependentsFlag.CONFIG);
+        dependents.valueProperty().addListener((o, was, is) -> specChanged());
+        for (CheckBox box : List.of(force, noWait)) {
             box.selectedProperty().addListener((o, was, is) -> specChanged());
         }
         force.getStyleClass().add("danger");
-        HBox flags = new HBox(12, all, level, withDependents, force, noWait);
+        HBox flags = new HBox(12, all, level, dependents, force, noWait);
         flags.setAlignment(Pos.CENTER_LEFT);
         flags.getStyleClass().add("flag-box");
 
@@ -232,7 +236,7 @@ public final class ReleaseTab extends BorderPane {
             }
         }
         return new ReleaseSpec(all.isSelected() ? Optional.ofNullable(level.getValue()) : Optional.empty(), picked,
-                force.isSelected(), withDependents.isSelected(), noWait.isSelected());
+                force.isSelected(), dependents.getValue(), noWait.isSelected());
     }
 
     void request(String module, String request) {

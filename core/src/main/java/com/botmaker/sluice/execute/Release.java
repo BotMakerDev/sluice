@@ -16,6 +16,7 @@ import com.botmaker.sluice.config.ConfigLoader;
 import com.botmaker.sluice.decide.ChangeKind;
 import com.botmaker.sluice.decide.Decider;
 import com.botmaker.sluice.decide.Decision;
+import com.botmaker.sluice.decide.Dependents;
 import com.botmaker.sluice.decide.Plan;
 import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.decide.Tags;
@@ -77,10 +78,16 @@ public final class Release {
      *
      * @param execute        release, rather than preview
      * @param force          turn each gate's refusal into a forced verdict
-     * @param withDependents release, at a patch, every dependent a release leaves pinning an older version
+     * @param dependents     what to do with each dependent a release owes; empty: what {@code sluice.yml}'s
+     *                       {@code owed} says
      * @param waitForTargets wait for each target a later module of the run resolves from
      */
-    public record Options(boolean execute, boolean force, boolean withDependents, boolean waitForTargets) {
+    public record Options(boolean execute, boolean force, Optional<Dependents> dependents, boolean waitForTargets) {
+
+        /** What this run does with an owed dependent under {@code config}. */
+        public Dependents dependents(Config config) {
+            return dependents.orElse(Dependents.of(config.owed()));
+        }
     }
 
     /** How a run ended. */
@@ -142,7 +149,7 @@ public final class Release {
                        Consumer<Event> events, Wiring wiring) {
         Config config = ConfigLoader.load(umbrella);
         Graph graph = Graph.build(UmbrellaLayout.of(umbrella), config);
-        Plan plan = Decider.decide(graph, config, requests, options.withDependents());
+        Plan plan = Decider.decide(graph, config, requests, options.dependents(config));
         Session session = new Session(umbrella, config, graph, plan, options, stop, events, wiring);
         List<Entry> entries = plan.releasing().entrySet().stream()
                 .map(e -> new Entry(e.getKey().name(), e.getValue(), Stage.DECIDED, "")).toList();
@@ -177,7 +184,7 @@ public final class Release {
     static Preview preview(Path umbrella, Requests requests, Options options, Wiring wiring) {
         Config config = ConfigLoader.load(umbrella);
         Graph graph = Graph.build(UmbrellaLayout.of(umbrella), config);
-        Plan plan = Decider.decide(graph, config, requests, options.withDependents());
+        Plan plan = Decider.decide(graph, config, requests, options.dependents(config));
         if (plan.releasing().isEmpty()) {
             return new Preview(plan, List.of());
         }

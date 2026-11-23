@@ -4,6 +4,7 @@
 package com.botmaker.sluice.desktop.model;
 
 import com.botmaker.sluice.decide.Decider;
+import com.botmaker.sluice.decide.Dependents;
 import com.botmaker.sluice.decide.Plan;
 import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.desktop.Fixtures;
@@ -46,7 +47,7 @@ class ReleaseWatchTest {
     void decide() {
         umbrella = Fixtures.open(Fixtures.pinned(tmp));
         plan = Decider.decide(umbrella.graph(), umbrella.config(), Requests.parse(List.of("a", "b"), Optional.empty()),
-                false);
+                Dependents.LIST);
         a = umbrella.module("a").orElseThrow();
         b = umbrella.module("b").orElseThrow();
     }

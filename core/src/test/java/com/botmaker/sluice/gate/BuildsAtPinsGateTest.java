@@ -11,6 +11,7 @@ import com.botmaker.sluice.model.Coordinate;
 import com.botmaker.sluice.spi.PublishTarget;
 import com.botmaker.sluice.spi.PublishTarget.Served;
 import com.botmaker.sluice.testing.FixtureUmbrella;
+import com.botmaker.sluice.testing.GateFixture;
 import com.botmaker.sluice.testing.GateFixture.FixedTarget;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -63,6 +64,31 @@ class BuildsAtPinsGateTest {
 
     private static FixedTarget target(Optional<String> repository) {
         return new FixedTarget(Spelling.VERSION, repository, Served.YES);
+    }
+
+    @Test
+    void lastingRepositoryLosesOnlyTheUmbrellasSnapshotsAndFailedDownloads() throws IOException {
+        FixtureUmbrella umbrella = umbrella("");
+        Path repository = tmp.resolve("lasting");
+        Path release = Files.createDirectories(repository.resolve("g/a/1.0.0"));
+        Path snapshot = Files.createDirectories(repository.resolve("g/a/1.0.1-SNAPSHOT"));
+        Path failed = Files.writeString(Files.createDirectories(repository.resolve("g/a/1.0.2"))
+                .resolve("a-1.0.2.pom.lastUpdated"), "x");
+        Path foreign = Files.createDirectories(repository.resolve("other/z/1-SNAPSHOT"));
+
+        BuildsAtPinsGate.purged(repository, GateFixture.context(umbrella, Config.defaults(), false, "a").graph());
+
+        assertTrue(Files.isDirectory(release));
+        assertTrue(Files.notExists(snapshot));
+        assertTrue(Files.notExists(failed));
+        assertTrue(Files.isDirectory(foreign), "another group's snapshot is not this umbrella's");
+    }
+
+    @Test
+    void lastingRepositoryIsUnderTheUsersCache() {
+        Path lasting = BuildsAtPinsGate.lastingRepository();
+        assertTrue(lasting.endsWith(Path.of("sluice", "repository")), lasting.toString());
+        assertTrue(!lasting.startsWith(Path.of(System.getProperty("user.home"), ".m2")), lasting.toString());
     }
 
     @Test

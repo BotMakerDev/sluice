@@ -48,7 +48,8 @@ public final class ConfigLoader {
     public static final String FILE = "sluice.yml";
 
     private static final Set<String> TOP = Set.of("target", "branch", "tag", "relevance", "modules", "text-pins",
-            "edges", "after-release", "changelog", "gates", "steps", "asset-pins", "github-releases");
+            "edges", "after-release", "changelog", "gates", "steps", "asset-pins", "github-releases",
+            "owed");
 
     private ConfigLoader() {
     }
@@ -164,7 +165,12 @@ public final class ConfigLoader {
                 each(top, "gates", ConfigLoader::gate, problems),
                 each(top, "steps", ConfigLoader::step, problems),
                 each(top, "asset-pins", ConfigLoader::assetPin, problems),
-                value(top, "github-releases", ConfigLoader::bool, defaults.githubReleases(), problems));
+                value(top, "github-releases", ConfigLoader::bool, defaults.githubReleases(), problems),
+                value(top, "owed", ConfigLoader::owed, defaults.owed(), problems));
+    }
+
+    private static Owed owed(Node node) {
+        return Owed.fromId(node.string()).orElseThrow(() -> node.wrong("must be release or refuse"));
     }
 
     /** The top-level {@code key} read by {@code read}, or {@code otherwise} when it is absent or wrong. */

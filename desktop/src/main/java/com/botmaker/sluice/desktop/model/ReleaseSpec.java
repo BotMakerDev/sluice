@@ -5,6 +5,7 @@ package com.botmaker.sluice.desktop.model;
 
 import com.botmaker.sluice.Level;
 import com.botmaker.sluice.Version;
+import com.botmaker.sluice.decide.Dependents;
 import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.execute.Release;
 
@@ -22,11 +23,41 @@ import java.util.Optional;
  * @param all            {@code --all LEVEL}, when ticked
  * @param picked         per module name, what its row asks: a level or an exact version, as typed
  * @param force          {@code --force}
- * @param withDependents {@code --with-dependents}
+ * @param dependents     {@code --with-dependents}, {@code --no-dependents}, or neither
  * @param noWait         {@code --no-wait}
  */
-public record ReleaseSpec(Optional<Level> all, Map<String, String> picked, boolean force, boolean withDependents,
-                          boolean noWait) {
+public record ReleaseSpec(Optional<Level> all, Map<String, String> picked, boolean force,
+                          DependentsFlag dependents, boolean noWait) {
+
+    /** What the run does with an owed dependent: what {@code sluice.yml} says, or a flag. */
+    public enum DependentsFlag {
+        CONFIG("owed: as sluice.yml", Optional.empty()),
+        WITH("--with-dependents", Optional.of(Dependents.ADD)),
+        WITHOUT("--no-dependents", Optional.of(Dependents.LEAVE));
+
+        private final String flag;
+        private final Optional<Dependents> dependents;
+
+        DependentsFlag(String flag, Optional<Dependents> dependents) {
+            this.flag = flag;
+            this.dependents = dependents;
+        }
+
+        /** Its flag on the command line, or what the choice shows when it adds none. */
+        public String flag() {
+            return flag;
+        }
+
+        /** What it asks of the run; empty: the config's {@code owed}. */
+        public Optional<Dependents> dependents() {
+            return dependents;
+        }
+
+        @Override
+        public String toString() {
+            return flag;
+        }
+    }
 
     public ReleaseSpec {
         picked = Collections.unmodifiableMap(new LinkedHashMap<>(picked));
@@ -55,7 +86,7 @@ public record ReleaseSpec(Optional<Level> all, Map<String, String> picked, boole
 
     /** How a run of it goes; a preview reads none of {@code execute}. */
     public Release.Options options(boolean execute) {
-        return new Release.Options(execute, force, withDependents, !noWait);
+        return new Release.Options(execute, force, dependents.dependents(), !noWait);
     }
 
     /** {@code sluice --all minor --module core=1.2.0 --force}: the same run from a terminal, as a preview. */
@@ -81,8 +112,8 @@ public record ReleaseSpec(Optional<Level> all, Map<String, String> picked, boole
     }
 
     private void flags(List<String> words) {
-        if (withDependents) {
-            words.add("--with-dependents");
+        if (dependents != DependentsFlag.CONFIG) {
+            words.add(dependents.flag());
         }
         if (force) {
             words.add("--force");

@@ -3,6 +3,7 @@
 
 package com.botmaker.sluice.cli;
 
+import com.botmaker.sluice.decide.Decider;
 import com.botmaker.sluice.decide.Decision;
 import com.botmaker.sluice.decide.Plan;
 import com.botmaker.sluice.execute.Event;
@@ -40,10 +41,12 @@ final class Console implements Consumer<Event> {
     private void decided(Plan plan) {
         out.println("decided:");
         for (Decision decision : plan.decisions()) {
+            // A module nobody named, added or left because a release owes it, is always said with its reason.
+            boolean owed = decision.reason().startsWith(Decider.ADDED) || decision.reason().startsWith(Decider.LEFT);
             if (decision.releasing()) {
                 out.println("  " + decision.module() + " " + decision.base() + " -> " + decision.release().get()
-                        + (why ? "  (" + decision.reason() + ")" : ""));
-            } else if (why) {
+                        + (why || owed ? "  (" + decision.reason() + ")" : ""));
+            } else if (why || owed) {
                 out.println("  " + decision.module() + " " + decision.base() + ", not released  ("
                         + decision.reason() + ")");
             }

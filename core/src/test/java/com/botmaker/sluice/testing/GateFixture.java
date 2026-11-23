@@ -7,6 +7,7 @@ import com.botmaker.sluice.Runner;
 import com.botmaker.sluice.Spelling;
 import com.botmaker.sluice.config.Config;
 import com.botmaker.sluice.decide.Decider;
+import com.botmaker.sluice.decide.Dependents;
 import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.gate.GateVerdict;
 import com.botmaker.sluice.gate.Gates;
@@ -33,7 +34,8 @@ public final class GateFixture {
     public static GateContext context(FixtureUmbrella umbrella, Config config, boolean force, String... modules) {
         Graph graph = Graph.build(UmbrellaLayout.of(umbrella.root()), config);
         return new GateContext(umbrella.root(), graph,
-                Decider.decide(graph, config, Requests.parse(List.of(modules), Optional.empty()), false),
+                Decider.decide(graph, config, Requests.parse(List.of(modules), Optional.empty()),
+                        Dependents.LIST),
                 config, new Runner(true, line -> { }), force);
     }
 

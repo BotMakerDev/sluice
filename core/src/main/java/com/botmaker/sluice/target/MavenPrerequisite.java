@@ -32,6 +32,10 @@ final class MavenPrerequisite {
     private static final Pattern PREREQUISITE =
             Pattern.compile("<prerequisites>.*?<maven>(.*?)</maven>", Pattern.DOTALL);
     private static final Pattern PROPERTY = Pattern.compile("\\$\\{([^}]+)}");
+    private static final Pattern PROPERTIES = Pattern.compile("<properties>(.*?)</properties>", Pattern.DOTALL);
+    private static final Pattern PARENT =Pattern.compile("<parent>(.*?)</parent>", Pattern.DOTALL);
+    /** How many {@code <parent>} poms a property is looked for in: Apache's plugins sit four deep. */
+    private static final int PARENTS = 6;
 
     /** What one pinned plugin demands of the Maven that runs it. */
     sealed interface Needs {
@@ -127,7 +131,7 @@ final class MavenPrerequisite {
         String value = found.group(1).strip();
         Matcher property = PROPERTY.matcher(value);
         if (property.matches()) {
-            value = tag(text.get(), property.group(1));
+            value = property(text.get(), property.group(1), poms, PARENTS);
         }
         return NUMERIC.matcher(value).matches()
                 ? new Needs.Demands(named, value)
@@ -146,6 +150,26 @@ final class MavenPrerequisite {
             }
         }
         return false;
+    }
+
+    /**
+     * The property {@code name} as the pom {@code xml} or, when it does not set it, its {@code <parent>} poms set it,
+     * read as the plugin's own pom is; {@code ""} when none within {@code depth} parents does.
+     */
+    private static String property(String xml, String name, Function<String, Optional<String>> poms, int depth) {
+        Matcher properties = PROPERTIES.matcher(xml);
+        String set = properties.find() ? tag(properties.group(1), name) : "";
+        if (!set.isEmpty()) {
+            return set;
+        }
+        Matcher parent = PARENT.matcher(xml);
+        if (depth == 0 || !parent.find()) {
+            return "";
+        }
+        String block = parent.group(1);
+        Coordinate coordinate = new Coordinate(tag(block, "groupId"), tag(block, "artifactId"));
+        return poms.apply(MavenTarget.pomPath(coordinate, tag(block, "version")))
+                .map(text -> property(text, name, poms, depth - 1)).orElse("");
     }
 
     private static String tag(String xml, String name) {

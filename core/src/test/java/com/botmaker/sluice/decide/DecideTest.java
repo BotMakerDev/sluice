@@ -8,6 +8,7 @@ import com.botmaker.sluice.Refusal;
 import com.botmaker.sluice.Version;
 import com.botmaker.sluice.config.Config;
 import com.botmaker.sluice.config.ConfigLoader;
+import com.botmaker.sluice.execute.Release;
 import com.botmaker.sluice.layout.UmbrellaLayout;
 import com.botmaker.sluice.model.Graph;
 import com.botmaker.sluice.model.Module;
@@ -45,8 +46,12 @@ class DecideTest {
     }
 
     private Plan decide(Optional<Level> all, boolean withDependents, String... moduleArgs) {
+        return decide(all, withDependents ? Dependents.ADD : Dependents.LIST, moduleArgs);
+    }
+
+    private Plan decide(Optional<Level> all, Dependents dependents, String... moduleArgs) {
         Graph graph = Graph.build(UmbrellaLayout.of(umbrella.root()), config);
-        return Decider.decide(graph, config, Requests.parse(List.of(moduleArgs), all), withDependents);
+        return Decider.decide(graph, config, Requests.parse(List.of(moduleArgs), all), dependents);
     }
 
     private static Map<String, String> releasing(Plan plan) {
@@ -224,6 +229,28 @@ class DecideTest {
     }
 
     @Test
+    void noDependentsLeavesTheOwedOneUnlisted() {
+        aAndItsDependent();
+        umbrella.commit("a", "src/A.java", "class A {}\n");
+
+        Plan plan = decide(Optional.empty(), Dependents.LEAVE, "a");
+
+        assertEquals(Map.of("a", "1.0.1"), releasing(plan));
+        assertEquals(List.of(), plan.owedUnrequested());
+        assertTrue(of(plan, "b").reason().startsWith("left, owed a release"), of(plan, "b").reason());
+    }
+
+    @Test
+    void theConfigAddsOwedDependentsUnlessItRefuses() {
+        assertEquals(Dependents.ADD, Dependents.of(Config.defaults().owed()));
+        Config refusing = ConfigLoader.parse("owed: refuse\n", "t");
+        assertEquals(Dependents.LIST, Dependents.of(refusing.owed()));
+        Release.Options told = new Release.Options(false, false, Optional.of(Dependents.LEAVE), true);
+        assertEquals(Dependents.LEAVE, told.dependents(refusing));
+        assertEquals(Dependents.LIST, new Release.Options(false, false, Optional.empty(), true).dependents(refusing));
+    }
+
+    @Test
     void requestedDependentWithNoChangeIsReleasedWhenOwed() {
         aAndItsDependent();
         umbrella.commit("a", "src/A.java", "class A {}\n");
@@ -250,6 +277,8 @@ class DecideTest {
 
         assertEquals(Map.of("a", "1.0.1"), releasing(plan));
         assertEquals("text pin in b/src/Fallback.java", plan.owedUnrequested().getFirst().why());
+        Plan left = decide(Optional.empty(), Dependents.LEAVE, "a");
+        assertEquals(1, left.owedUnrequested().size(), "no branch pin follows a text pin: still owed");
     }
 
     @Test

@@ -34,8 +34,8 @@ import static com.botmaker.sluice.testing.PlainUmbrella.pom;
 final class ReleaseFixture {
 
     static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-10T12:00:00Z"), ZoneOffset.UTC);
-    static final Options EXECUTE = new Options(true, false, false, true);
-    static final Options PREVIEW = new Options(false, false, false, true);
+    static final Options EXECUTE = new Options(true, false, Optional.empty(), true);
+    static final Options PREVIEW = new Options(false, false, Optional.empty(), true);
 
     private ReleaseFixture() {
     }
