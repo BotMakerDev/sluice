@@ -97,6 +97,7 @@ public final class ReleaseTab extends BorderPane {
     private final TextArea output = new TextArea();
     private final LiveBadge badge = new LiveBadge();
     private final Timeline ticker = new Timeline(new KeyFrame(Duration.seconds(1), e -> redraw()));
+    private BooleanSupplier blocked = () -> false;
 
     /** The spec the last clean preview was of; Execute… cuts only that. */
     private Optional<ReleaseSpec> armed = Optional.empty();
@@ -264,6 +265,11 @@ public final class ReleaseTab extends BorderPane {
 
     public boolean running() {
         return watch != null && watch.running();
+    }
+
+    /** While this says so, no release or resume starts: an update may be replacing the files it would run on. */
+    public void setBlocked(BooleanSupplier blocked) {
+        this.blocked = blocked;
     }
 
     /** Asks the run to stop after the step it is on. */
@@ -501,6 +507,10 @@ public final class ReleaseTab extends BorderPane {
     }
 
     private void start(ReleaseSpec spec, Runs runs) {
+        if (blocked.getAsBoolean()) {
+            status.setText("sluice is updating itself: start the release once the update has ended.");
+            return;
+        }
         armed = Optional.empty();
         stopAsked.set(false);
         banner.hide();

@@ -15,6 +15,11 @@ All notable changes to this project are documented here, in the format of
   release's new `checksums_sha256.txt` first; a release without one is refused before anything is downloaded.
   `--check` says the installed and latest versions and how it would install. The jar's manifest names the repository
   (`Implementation-URL`).
+- **sluice-desktop's Check for updates** (top bar): the same check and update, through core's
+  `SelfUpdate.ofWindow`, which replaces a jar of the user's with `sluice-desktop-all.jar` and asks for root through
+  `pkexec` even when a terminal started the window. It offers the update only for a newer release, on an install
+  it can update. No update starts while a release runs, no release starts while an update runs, and the window stays
+  open until the update ends. Off a terminal without `pkexec`, root is asked by `sudo -n`, which never prompts.
 - `PinMoves.Goals`: a caller replaces how `versions:set` and `versions:set-property` run (`Goals.maven` the default).
   `Release.Wiring` takes one in place of its Maven arguments.
 

@@ -17,6 +17,13 @@ import java.util.Optional;
 /** {@link Host} as this machine answers it. */
 final class SystemHost implements Host {
 
+    private final boolean terminalAsks;
+
+    /** This machine; {@code terminalAsks} false when nobody reads this process's terminal, as for a window. */
+    SystemHost(boolean terminalAsks) {
+        this.terminalAsks = terminalAsks;
+    }
+
     @Override
     public boolean windows() {
         return Proc.isWindows();
@@ -30,7 +37,7 @@ final class SystemHost implements Host {
     @Override
     public boolean terminal() {
         Console console = System.console();
-        return console != null && console.isTerminal();
+        return terminalAsks && console != null && console.isTerminal();
     }
 
     @Override

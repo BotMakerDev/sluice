@@ -16,6 +16,8 @@ import com.botmaker.sluice.desktop.ui.ReleaseTab;
 import com.botmaker.sluice.desktop.ui.ReleasesTab;
 import com.botmaker.sluice.desktop.ui.StartPane;
 import com.botmaker.sluice.desktop.ui.Themed;
+import com.botmaker.sluice.desktop.ui.UpdateDialog;
+import com.botmaker.sluice.update.SelfUpdate;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -60,6 +62,8 @@ public final class SluiceDesktop extends Application {
     private ReleaseTab release;
     private LazyTab<ConfigTab> config;
     private boolean closeWhenEnded;
+    /** A check or an update is under way: no release starts and the window stays open until it ends. */
+    private boolean updating;
 
     @Override
     public void start(Stage stage) {
@@ -80,9 +84,24 @@ public final class SluiceDesktop extends Application {
             prefs.theme(next);
             theme.setText(themeLabel(next));
         });
+        Button updates = new Button("Check for updates");
+        updates.setOnAction(e -> {
+            // An update may replace the files this process runs from: never while a release runs on them.
+            if (release != null && release.running()) {
+                message.setText("A release is running: check for updates once it has ended.");
+                return;
+            }
+            updates.setDisable(true);
+            updating = true;
+            new UpdateDialog(stage, () -> SelfUpdate.ofWindow(SluiceDesktop.class), message.textProperty())
+                    .check(() -> {
+                        updating = false;
+                        updates.setDisable(false);
+                    });
+        });
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox bar = new HBox(10, umbrellaPath, openOther, spacer, message, theme);
+        HBox bar = new HBox(10, umbrellaPath, openOther, spacer, message, updates, theme);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(6, 10, 6, 10));
         bar.getStyleClass().addAll("top-bar", "umbrella-bar");
@@ -97,7 +116,11 @@ public final class SluiceDesktop extends Application {
         stage.setTitle(TITLE);
         icons(stage);
         stage.setOnCloseRequest(e -> {
-            if (release != null && release.running()) {
+            if (updating) {
+                // Closing would interrupt a download, or leave a package manager running unseen.
+                e.consume();
+                message.setText("An update is under way: the window closes once it has ended.");
+            } else if (release != null && release.running()) {
                 e.consume();
                 askToClose();
             } else if (!configMayGo()) {
@@ -146,6 +169,7 @@ public final class SluiceDesktop extends Application {
         ModulesTab modules = new ModulesTab(umbrella, browse);
         release = new ReleaseTab(umbrella, browse);
         modules.setBlocked(release::running);
+        release.setBlocked(() -> updating);
         LazyTab<ReleasesTab> releases = new LazyTab<>("Releases", () -> new ReleasesTab(umbrella, browse));
         LazyTab<ChangelogTab> changelog = new LazyTab<>("Changelog", () -> new ChangelogTab(umbrella));
         config = new LazyTab<>("Config", () -> new ConfigTab(umbrella));

@@ -65,10 +65,10 @@ sluice-all.jar`. All are on the [Releases](https://github.com/BotMakerDev/sluice
 
 `sluice update` updates any of them in its own way, each download checked against the release's
 `checksums_sha256.txt`: a jar is replaced; the rpm or deb is upgraded from its signed repository by dnf or apt, or,
-without that repository, the release's package installed (as root, by `sudo` on a terminal, `pkexec` off one); the
+without that repository, the release's package installed (as root, by `sudo` on a terminal, `pkexec` off one or `sudo -n` without it); the
 MSI's installer is run, an unzipped `sluice-windows.zip` unpacked over, and Scoop's install left to
 `scoop update sluice`. On Windows the last step waits until every sluice of that install has ended, since a running
-program's files are locked.
+program's files are locked. sluice-desktop's *Check for updates* does the same.
 
 Every install holds both the command, `sluice`, and the same releases in a window, `sluice-desktop` (sluice in the
 desktop's menu or the Start menu).

@@ -138,6 +138,7 @@
                                     <mainClass>com.botmaker.sluice.desktop.Launcher</mainClass>
                                     <manifestEntries>
                                         <Implementation-Version>${project.version}</Implementation-Version>
+                                        <Implementation-URL>${project.parent.url}</Implementation-URL>
                                         <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
                                     </manifestEntries>
                                 </transformer>

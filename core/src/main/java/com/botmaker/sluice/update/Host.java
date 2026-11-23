@@ -12,7 +12,7 @@ import java.util.Optional;
 public interface Host {
 
     /** This machine. */
-    Host SYSTEM = new SystemHost();
+    Host SYSTEM = new SystemHost(true);
 
     boolean windows();
 

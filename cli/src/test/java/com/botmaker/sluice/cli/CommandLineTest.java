@@ -134,8 +134,10 @@ class CommandLineTest {
 
         Ran check = sluice(engine, "update", "--check");
         assertEquals(Main.OK, check.code(), check.toString());
-        assertTrue(check.out().contains("sluice 0.4.2; the latest release is v9.0.0: sluice update installs it"),
+        assertTrue(check.out().lines().anyMatch("sluice 0.4.2; the latest release is v9.0.0"::equals),
                 check.toString());
+        assertFalse(check.out().contains("sluice update installs it"), "an install it cannot update: "
+                + check);
         assertTrue(check.out().contains("not updated here: an IDE run"), check.toString());
     }
 

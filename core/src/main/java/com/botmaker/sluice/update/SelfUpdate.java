@@ -32,6 +32,9 @@ public final class SelfUpdate {
     /** The release asset that is the whole command, for a jar of the user's. */
     public static final String JAR = "sluice-all.jar";
 
+    /** The release asset that is the whole window, for a jar of the user's. */
+    public static final String DESKTOP_JAR = "sluice-desktop-all.jar";
+
     /** The release's MSI. */
     public static final String MSI = "sluice.msi";
 
@@ -45,6 +48,11 @@ public final class SelfUpdate {
         public boolean newer() {
             return installed.isPresent() && Version.parse(latest).filter(v -> v.compareTo(installed.get()) > 0)
                     .isPresent();
+        }
+
+        /** Whether {@link #update} would install something: a newer release, on an install it can update. */
+        public boolean updatable() {
+            return newer() && !(install instanceof Install.Unmanaged);
         }
     }
 
@@ -70,12 +78,20 @@ public final class SelfUpdate {
     private final Host host;
     private final Install install;
     private final Optional<Version> installed;
+    private final String jarAsset;
 
+    /** The command's update: a jar of the user's is replaced by {@link #JAR}. */
     public SelfUpdate(Releases releases, Host host, Install install, Optional<String> installed) {
+        this(releases, host, install, installed, JAR);
+    }
+
+    /** An update whose jar of the user's is replaced by the release asset {@code jarAsset}. */
+    public SelfUpdate(Releases releases, Host host, Install install, Optional<String> installed, String jarAsset) {
         this.releases = releases;
         this.host = host;
         this.install = install;
         this.installed = installed.flatMap(Version::parse);
+        this.jarAsset = jarAsset;
     }
 
     /**
@@ -83,12 +99,25 @@ public final class SelfUpdate {
      * {@code Implementation-URL}, the GitHub repository whose releases it follows.
      */
     public static SelfUpdate of(Class<?> anchor) {
+        return of(anchor, JAR, Host.SYSTEM);
+    }
+
+    /**
+     * {@link #of}, for the window ({@code sluice-desktop}): a jar of the user's is replaced by {@link #DESKTOP_JAR},
+     * and root is asked for by {@code pkexec}'s own window even when a terminal started it, since nobody reads
+     * that terminal's {@code sudo} prompt.
+     */
+    public static SelfUpdate ofWindow(Class<?> anchor) {
+        return of(anchor, DESKTOP_JAR, new SystemHost(false));
+    }
+
+    private static SelfUpdate of(Class<?> anchor, String jarAsset, Host host) {
         Package pkg = anchor.getPackage();
         Optional<Path> jar = jar(anchor);
         Optional<Repo> home = jar.flatMap(SelfUpdate::manifestUrl).flatMap(Repo::ofRemote);
         Releases releases = home.map(Releases::github).orElse(NOWHERE);
-        return new SelfUpdate(releases, Host.SYSTEM, Install.of(jar.orElse(null), Host.SYSTEM),
-                Optional.ofNullable(pkg.getImplementationVersion()));
+        return new SelfUpdate(releases, host, Install.of(jar.orElse(null), host),
+                Optional.ofNullable(pkg.getImplementationVersion()), jarAsset);
     }
 
     /**
@@ -184,7 +213,7 @@ public final class SelfUpdate {
         Path part = jar.resolveSibling(jar.getFileName() + ".part");
         try {
             Files.deleteIfExists(part);   // one a killed run left would keep its tail past the new bytes
-            download(latest, JAR, part);
+            download(latest, jarAsset, part);
             keepPermissions(jar, part);
             move(part, pending(jar));
         } finally {
@@ -281,15 +310,20 @@ public final class SelfUpdate {
         };
     }
 
-    /** {@code argv} as root: as it is when this is root, else through sudo on a terminal and pkexec off one. */
+    /**
+     * {@code argv} as root: as it is when this is root, else through sudo on a terminal and pkexec off one. Off a
+     * terminal without pkexec, {@code sudo -n}, which never asks: a password prompt there would wait for good.
+     */
     private List<String> elevated(List<String> argv) throws IOException {
         if (host.root()) {
             return argv;
         }
-        List<String> order = host.terminal() ? List.of("sudo", "pkexec") : List.of("pkexec", "sudo");
-        String elevator = order.stream().filter(host::onPath).findFirst().orElseThrow(() -> new IOException(
-                "installing a package needs root, and neither sudo nor pkexec is on the PATH"));
-        List<String> elevatedArgv = new ArrayList<>(List.of(elevator));
+        List<List<String>> order = host.terminal() ? List.of(List.of("sudo"), List.of("pkexec"))
+                : List.of(List.of("pkexec"), List.of("sudo", "-n"));
+        List<String> elevator = order.stream().filter(e -> host.onPath(e.getFirst())).findFirst()
+                .orElseThrow(() -> new IOException(
+                        "installing a package needs root, and neither sudo nor pkexec is on the PATH"));
+        List<String> elevatedArgv = new ArrayList<>(elevator);
         elevatedArgv.addAll(argv);
         return elevatedArgv;
     }

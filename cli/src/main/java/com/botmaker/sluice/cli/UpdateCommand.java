@@ -41,7 +41,7 @@ final class UpdateCommand implements Callable<Integer> {
                 SelfUpdate.Check checked = update.check();
                 String installed = checked.installed().map(v -> "sluice " + v).orElse("this development build");
                 out.println(installed + "; the latest release is " + checked.latest()
-                        + (checked.newer() ? ": sluice update installs it" : ""));
+                        + (checked.updatable() ? ": sluice update installs it" : ""));
                 out.println((checked.install() instanceof Install.Unmanaged ? "not updated here: "
                         : "installed as ") + checked.install().describe());
                 return Main.OK;

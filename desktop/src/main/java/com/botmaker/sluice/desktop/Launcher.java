@@ -3,6 +3,7 @@
 
 package com.botmaker.sluice.desktop;
 
+import com.botmaker.sluice.update.SelfUpdate;
 import javafx.application.Application;
 
 /**
@@ -15,6 +16,7 @@ public final class Launcher {
     }
 
     public static void main(String[] args) {
+        SelfUpdate.finishPending(SluiceDesktop.class);
         Application.launch(SluiceDesktop.class, args);
     }
 }

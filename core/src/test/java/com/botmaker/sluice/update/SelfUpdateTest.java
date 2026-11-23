@@ -129,6 +129,20 @@ class SelfUpdateTest {
     }
 
     @Test
+    void theWindowsJarIsReplacedByTheReleasesDesktopJar() throws IOException {
+        release(SelfUpdate.JAR, "new command");
+        release(SelfUpdate.DESKTOP_JAR, "new window");
+        Path jar = jar("sluice-desktop-all.jar", "old window");
+        FakeHost host = new FakeHost();
+
+        SelfUpdate.Outcome outcome = new SelfUpdate(new GitHubReleases(URI.create(base()), REPO), host,
+                Install.of(jar, host), Optional.of("0.4.2"), SelfUpdate.DESKTOP_JAR).update();
+
+        assertInstanceOf(SelfUpdate.Outcome.Updated.class, outcome);
+        assertEquals("new window", Files.readString(jar));
+    }
+
+    @Test
     void theLatestNoNewerIsCurrentAndDownloadsNothing() throws IOException {
         release(SelfUpdate.JAR, "new jar");
         Path jar = jar("sluice-all.jar", "old jar");
@@ -238,6 +252,19 @@ class SelfUpdateTest {
 
         assertEquals(List.of("pkexec", "apt-get", "install", "-y"), host.ran.get(0).subList(0, 4));
         assertEquals(List.of("apt-get", "install", "-y"), host.ran.get(1).subList(0, 3));
+    }
+
+    @Test
+    void offATerminalWithoutPkexecSudoNeverAsks() throws IOException {
+        release(Install.Format.DEB.asset(), "deb bytes");
+        Path jar = jar("usr/lib/sluice/sluice-all.jar", "old jar");
+        FakeHost host = new FakeHost();
+        host.owner = Install.Format.DEB;
+        host.path.addAll(List.of("sudo", "apt-get"));
+
+        update(Install.of(jar, host), host, "0.4.2").update();
+
+        assertEquals(List.of("sudo", "-n", "apt-get", "install", "-y"), host.ran.getFirst().subList(0, 5));
     }
 
     @Test
