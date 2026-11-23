@@ -3,17 +3,23 @@
 
 package com.botmaker.sluice.gate;
 
+import com.botmaker.sluice.Git;
+import com.botmaker.sluice.Runner;
 import com.botmaker.sluice.config.Config;
+import com.botmaker.sluice.config.ConfigLoader;
 import com.botmaker.sluice.gate.GateVerdict.Status;
 import com.botmaker.sluice.github.GitHub;
 import com.botmaker.sluice.github.GitHub.Repo;
 import com.botmaker.sluice.github.GitHub.Run;
+import com.botmaker.sluice.spi.GateContext;
 import com.botmaker.sluice.testing.FixtureUmbrella;
+import com.botmaker.sluice.testing.GateFixture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,6 +29,7 @@ import static com.botmaker.sluice.testing.PlainUmbrella.dep;
 import static com.botmaker.sluice.testing.PlainUmbrella.pom;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CiGateTest {
@@ -142,6 +149,68 @@ class CiGateTest {
         assertEquals(Status.SKIPPED, verdict(Optional.of(List.of(RUNNING))).status());
         assertEquals(Status.SKIPPED, verdict(Optional.of(List.of())).status());
         assertEquals(Status.SKIPPED, verdict(Optional.empty()).status());
+    }
+
+    /** A module with a workflow and one commit its origin lacks; its {@code HEAD}. */
+    private String aheadWithAWorkflow() {
+        umbrella.commit("a", ".github/workflows/ci.yml", "on: push\n").commit("a", "src/A.java", "class A {}\n");
+        return Git.line(umbrella.dir("a"), "rev-parse", "HEAD").orElseThrow();
+    }
+
+    private static GateContext executing(GateContext preview) {
+        return new GateContext(preview.umbrella(), preview.graph(), preview.plan(), preview.config(),
+                new Runner(false, line -> { }), false);
+    }
+
+    @Test
+    void previewSaysItWouldPushAndWait() {
+        aheadWithAWorkflow();
+        GitHub github = (repo, branch) -> Optional.of(List.of(PASSED));
+
+        GateVerdict verdict = only(check(new CiGate(Optional.of(github), module -> Optional.of(new Repo("o", "a"))),
+                umbrella, Config.defaults(), "a"));
+
+        assertEquals(Status.SKIPPED, verdict.status());
+        assertTrue(verdict.line().contains("a is 2 commit(s) ahead of origin/main: a run pushes it and waits up to "
+                + "20 min for CI on its HEAD"), verdict.line());
+        assertNotEquals(Git.line(umbrella.dir("a"), "rev-parse", "HEAD"),
+                Git.line(umbrella.dir("a"), "rev-parse", "refs/remotes/origin/main"), "a preview pushes nothing");
+    }
+
+    @Test
+    void runPushesThenWaitsForCiOnHead() {
+        String head = aheadWithAWorkflow();
+        List<List<Run>> answers = new ArrayList<>(List.of(List.of(PASSED),
+                List.of(new Run("ci", "in_progress", "", "u", head), PASSED),
+                List.of(new Run("ci", "completed", "success", "u", head), PASSED)));
+        GitHub github = (repo, branch) -> Optional.of(answers.size() > 1 ? answers.removeFirst() : answers.getFirst());
+        int[] slept = {0};
+        CiGate gate = new CiGate(Optional.of(github), module -> Optional.of(new Repo("o", "a")),
+                Optional.of(duration -> ++slept[0] > 0));
+
+        List<GateVerdict> verdicts = gate.check(executing(GateFixture.context(umbrella, Config.defaults(), false,
+                "a")));
+
+        assertEquals(Status.OK, only(verdicts).status(), only(verdicts).line());
+        assertEquals(2, slept[0]);
+        assertEquals(Optional.of(head), Git.line(umbrella.dir("a"), "rev-parse", "refs/remotes/origin/main"),
+                "pushed before waiting");
+    }
+
+    @Test
+    void waitThatRunsOutLeavesCiUnchecked() {
+        aheadWithAWorkflow();
+        GitHub github = (repo, branch) -> Optional.of(List.of(PASSED));
+        int[] slept = {0};
+        CiGate gate = new CiGate(Optional.of(github), module -> Optional.of(new Repo("o", "a")),
+                Optional.of(duration -> ++slept[0] > 0));
+        Config oneMinute = ConfigLoader.parse("ci-wait: 1\n", "t");
+
+        GateVerdict verdict = only(gate.check(executing(GateFixture.context(umbrella, oneMinute, false, "a"))));
+
+        assertEquals(Status.SKIPPED, verdict.status());
+        assertTrue(verdict.line().contains("no finished run built its HEAD"), verdict.line());
+        assertEquals(1, slept[0], "one minute is two asks, thirty seconds apart");
     }
 
     @Test

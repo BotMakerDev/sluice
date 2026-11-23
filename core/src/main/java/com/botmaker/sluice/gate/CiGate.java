@@ -12,7 +12,12 @@ import com.botmaker.sluice.model.Edge;
 import com.botmaker.sluice.model.Module;
 import com.botmaker.sluice.spi.Gate;
 import com.botmaker.sluice.spi.GateContext;
+import com.botmaker.sluice.target.Waits.Sleeper;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -20,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 /**
  * No module released is red on its release branch: for each of its workflows, the newest finished run there did
@@ -28,19 +34,33 @@ import java.util.function.Function;
  * <p>Only a finished run refuses; one still going, or cancelled, leaves the finished one before it to answer. No
  * token, a remote that is not on GitHub, GitHub not answering, no finished run and green runs that are all of
  * an older commit than the module's {@code HEAD} are all skipped.
+ *
+ * <p><b>A run does not leave CI unchecked when it can wait for it</b>: a module ahead of its origin is pushed
+ * first (the release would push it anyway, untested), then the gate waits, up to {@code ci-wait}, for a finished
+ * run of each workflow on its {@code HEAD}. A preview pushes nothing and waits for nothing: it says it would.
  */
 public final class CiGate implements Gate {
 
+    /** How often a wait asks GitHub. */
+    static final Duration EVERY = Duration.ofSeconds(30);
+
     private final Optional<GitHub> github;
     private final Function<Module, Optional<Repo>> repos;
+    private final Optional<Sleeper> sleeper;
 
     public CiGate(Optional<GitHub> github) {
-        this(github, module -> Repo.ofCheckout(module.dir().dir()));
+        this(github, module -> Repo.ofCheckout(module.dir().dir()), Optional.empty());
     }
 
     CiGate(Optional<GitHub> github, Function<Module, Optional<Repo>> repos) {
+        this(github, repos, Optional.empty());
+    }
+
+    /** @param sleeper how a wait passes time; empty: the real one, stopped with the run */
+    CiGate(Optional<GitHub> github, Function<Module, Optional<Repo>> repos, Optional<Sleeper> sleeper) {
         this.github = github;
         this.repos = repos;
+        this.sleeper = sleeper;
     }
 
     @Override
@@ -60,6 +80,27 @@ public final class CiGate implements Gate {
         Map<Module, Optional<List<Run>>> asked = new HashMap<>();
         Function<Module, Optional<List<Run>>> runsOf = module -> asked.computeIfAbsent(module,
                 m -> repos.apply(m).flatMap(repo -> github.get().runs(repo, branch)));
+        // Every module is pushed before any is waited on, so their CI runs at once.
+        Map<Module, GateVerdict> early = new HashMap<>();
+        for (Module module : ctx.plan().releasing().keySet()) {
+            if (repos.apply(module).isEmpty()) {
+                continue;
+            }
+            int ahead = Git.line(module.dir().dir(), "rev-list", "--count", "refs/remotes/origin/" + branch + "..HEAD")
+                    .map(Integer::parseInt).orElse(0);
+            if (ahead == 0) {
+                continue;
+            }
+            if (ctx.runner().dryRun()) {
+                early.put(module, skipped(module + " is " + ahead + " commit(s) ahead of origin/" + branch
+                        + ": a run pushes it" + (waits(ctx, module) ? " and waits up to "
+                        + ctx.config().ciWait().toMinutes() + " min for CI on its HEAD" : "")
+                        + "; CI was not checked"));
+            } else if (!ctx.runner().git(module.dir().dir(), "push", "-q", "origin", branch).ok()) {
+                early.put(module, refused(module + ": its " + ahead + " commit(s) ahead of origin/" + branch
+                        + " could not be pushed", "     git -C " + module + " push origin " + branch));
+            }
+        }
         List<GateVerdict> verdicts = new ArrayList<>();
         for (Module module : ctx.plan().releasing().keySet()) {
             Optional<Repo> repo = repos.apply(module);
@@ -67,12 +108,66 @@ public final class CiGate implements Gate {
                 verdicts.add(skipped(module + ": its origin is not on GitHub, CI was not checked"));
                 continue;
             }
+            if (early.containsKey(module)) {
+                verdicts.add(early.get(module));
+                continue;
+            }
+            if (!ctx.runner().dryRun() && waits(ctx, module)) {
+                asked.put(module, waitForHead(ctx, module, repo.get(), branch));
+            }
             Optional<List<Run>> runs = runsOf.apply(module);
             verdicts.add(runs.isEmpty()
                     ? skipped(module + ": GitHub did not answer for " + repo.get() + ", CI was not checked")
                     : verdict(ctx, module, branch, runs.get(), runsOf));
         }
         return verdicts;
+    }
+
+    /**
+     * The branch's runs once a finished run built the module's {@code HEAD} and none is still going,
+     * or as they are when {@code ci-wait} ran out, the run was stopped, or GitHub did not answer.
+     */
+    private Optional<List<Run>> waitForHead(GateContext ctx, Module module, Repo repo, String branch) {
+        Path dir = module.dir().dir();
+        Optional<String> head = Git.line(dir, "rev-parse", "HEAD");
+        Sleeper sleep = sleeper.orElseGet(() -> Sleeper.real(ctx.runner()::stopping));
+        long asks = Math.max(1, ctx.config().ciWait().toSeconds() / EVERY.toSeconds());
+        Optional<List<Run>> runs = github.orElseThrow().runs(repo, branch);
+        for (long ask = 1; ask < asks && runs.isPresent() && !builtAll(runs.get(), dir, head); ask++) {
+            if (ask == 1) {
+                String at = head.map(sha -> sha.substring(0, Math.min(7, sha.length()))).orElse("HEAD");
+                ctx.runner().say(module + ": waiting up to " + ctx.config().ciWait().toMinutes() + " min for CI on "
+                        + at);
+            }
+            if (!sleep.sleep(EVERY)) {
+                break;
+            }
+            runs = github.get().runs(repo, branch);
+        }
+        return runs;
+    }
+
+    /**
+     * Whether the verdict can be given: a finished run built {@code head}, as the verdict asks, and none is still
+     * going. A workflow that skips the commit (a {@code paths} filter) is not waited on.
+     */
+    private static boolean builtAll(List<Run> runs, Path checkout, Optional<String> head) {
+        BranchRuns read = BranchRuns.of(runs, checkout);
+        return !read.running() && read.built(head);
+    }
+
+    /** Whether a run waits for {@code module}'s CI: {@code ci-wait} is not zero and it has a workflow of its own. */
+    private static boolean waits(GateContext ctx, Module module) {
+        return !ctx.config().ciWait().isZero() && hasWorkflows(module.dir().dir());
+    }
+
+    /** Whether the checkout has a workflow of its own: without one, no run will come to wait for. */
+    private static boolean hasWorkflows(Path checkout) {
+        try (Stream<Path> files = Files.list(checkout.resolve(GitHub.WORKFLOWS))) {
+            return files.anyMatch(file -> file.toString().endsWith(".yml") || file.toString().endsWith(".yaml"));
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     /**

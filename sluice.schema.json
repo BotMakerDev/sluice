@@ -101,6 +101,12 @@
       "enum": ["release", "refuse"],
       "description": "What a run does, unless --with-dependents or --no-dependents says, with a dependent that pins a module it releases: release it at its next patch, or refuse the run until it is asked for.",
       "default": "release"
+    },
+    "ci-wait": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Minutes the ci gate waits for CI to finish on a released module's HEAD, which a run pushes first when it is ahead of origin; 0 waits not at all.",
+      "default": 20
     }
   },
   "definitions": {

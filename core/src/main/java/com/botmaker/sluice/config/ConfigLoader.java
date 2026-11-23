@@ -26,6 +26,7 @@ import org.snakeyaml.engine.v2.exceptions.YamlEngineException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -49,7 +50,7 @@ public final class ConfigLoader {
 
     private static final Set<String> TOP = Set.of("target", "branch", "tag", "relevance", "modules", "text-pins",
             "edges", "after-release", "changelog", "gates", "steps", "asset-pins", "github-releases",
-            "owed");
+            "owed", "ci-wait");
 
     private ConfigLoader() {
     }
@@ -166,7 +167,8 @@ public final class ConfigLoader {
                 each(top, "steps", ConfigLoader::step, problems),
                 each(top, "asset-pins", ConfigLoader::assetPin, problems),
                 value(top, "github-releases", ConfigLoader::bool, defaults.githubReleases(), problems),
-                value(top, "owed", ConfigLoader::owed, defaults.owed(), problems));
+                value(top, "owed", ConfigLoader::owed, defaults.owed(), problems),
+                value(top, "ci-wait", ConfigLoader::minutes, defaults.ciWait(), problems));
     }
 
     private static Owed owed(Node node) {
@@ -255,6 +257,14 @@ public final class ConfigLoader {
         Map<String, Node> keys = node.map(Set.of("extractor", "pins"));
         return new ChangelogConfig(true, optional(keys, "extractor").map(ConfigLoader::command),
                 optional(keys, "pins").map(ConfigLoader::bool).orElse(false));
+    }
+
+    private static Duration minutes(Node node) {
+        int minutes = node.integer();
+        if (minutes < 0) {
+            throw node.wrong("must be minutes, 0 or more");
+        }
+        return Duration.ofMinutes(minutes);
     }
 
     private static boolean bool(Node node) {

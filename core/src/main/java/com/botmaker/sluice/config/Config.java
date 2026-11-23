@@ -6,6 +6,7 @@ package com.botmaker.sluice.config;
 import com.botmaker.sluice.Proc;
 import com.botmaker.sluice.Spelling;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -31,14 +32,18 @@ import java.util.stream.Stream;
  * @param steps           project steps, each a command at a point of the release
  * @param assetPins       files that pin a module's released asset by hash, set once its release is out
  * @param githubReleases  whether each tag of a module on GitHub gets a release page, its changelog's notes
- * @param owed            what a run does, unless told, with a dependent a release owes */
+ * @param owed            what a run does, unless told, with a dependent a release owes
+ * @param ciWait          how long the ci gate waits for CI to finish on a released module's {@code HEAD}; zero
+ *                        waits not at all */
 public record Config(Target target, String branch, String tagPattern, List<String> relevanceIgnore,
                      Map<String, ModuleConfig> modules, List<TextPinConfig> textPins, List<EdgeConfig> edges,
                      Map<String, Map<String, String>> afterRelease, ChangelogConfig changelog,
                      List<CommandConfig> gates, List<StepConfig> steps, List<AssetPinConfig> assetPins,
-                     boolean githubReleases, Owed owed) {
+                     boolean githubReleases, Owed owed, Duration ciWait) {
 
     public static final List<String> DEFAULT_IGNORE = List.of("**/*.md", "docs/**");
+    /** How long a run waits, by default, for CI to finish on a released module's {@code HEAD}. */
+    public static final Duration DEFAULT_CI_WAIT = Duration.ofMinutes(20);
 
     public Config {
         relevanceIgnore = List.copyOf(relevanceIgnore);
@@ -54,7 +59,7 @@ public record Config(Target target, String branch, String tagPattern, List<Strin
     /** What an umbrella without a {@code sluice.yml} gets. */
     public static Config defaults() {
         return new Config(new Target.None(), "main", "v{version}", DEFAULT_IGNORE, Map.of(), List.of(), List.of(),
-                Map.of(), ChangelogConfig.OFF, List.of(), List.of(), List.of(), true, Owed.RELEASE);
+                Map.of(), ChangelogConfig.OFF, List.of(), List.of(), List.of(), true, Owed.RELEASE, DEFAULT_CI_WAIT);
     }
 
     /** The settings of the submodule at {@code path}, none when the file gives it none. */

@@ -89,6 +89,7 @@ class SchemaTest {
         assertEquals(defaults.relevanceIgnore(), at("#/properties/relevance/properties/ignore").get("default"));
         assertEquals(defaults.githubReleases(), at("#/properties/github-releases").get("default"));
         assertEquals(defaults.owed().id(), at("#/properties/owed").get("default"));
+        assertEquals((int) defaults.ciWait().toMinutes(), at("#/properties/ci-wait").get("default"));
     }
 
     /** The keys the loader's refusal of the unknown key {@code zz} in {@code yaml} lists. */

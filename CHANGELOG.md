@@ -17,6 +17,13 @@ All notable changes to this project are documented here, in the format of
   Before each check every snapshot of the umbrella's groups, and every failed download remembered of them, is
   deleted from it: a build at the pins still resolves releases only.
 
+### Added
+
+- **The `ci` gate checks CI on what it releases.** A module ahead of its origin is pushed first (a preview says it
+  would), then the gate waits, up to `sluice.yml`'s new `ci-wait` (minutes, default 20, `0` not at all), for a
+  finished run of each workflow on its `HEAD`: green passes, red refuses, none by then stays `SKIPPED`. A module
+  without a workflow of its own is not waited on.
+
 ### Fixed
 
 - The JitPack target's prerequisite check no longer skips a plugin whose `<prerequisites><maven>` is a property its
