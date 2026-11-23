@@ -14,6 +14,7 @@ sluice resume [--dry-run]       # after a stop
 sluice status [FILE]            # a run's state, module by module
 sluice sync-pins [--dry-run]    # move every pin to its upstream's version on the branch
 sluice graph                    # the modules, their pins and the tag order
+sluice update [--check]         # this sluice to its latest release, the way it was installed
 ```
 
 A module's alias in `sluice.yml` is a flag too: `--sdk 1.10.0` is `--module sdk=1.10.0`. Every verb takes
@@ -61,6 +62,13 @@ repository so its package wins, and replaces that one if it is installed.
 
 Windows: `sluice.msi`, or `sluice-windows.zip` with its scoop manifest. Anywhere with Java 25: `java -jar
 sluice-all.jar`. All are on the [Releases](https://github.com/BotMakerDev/sluice/releases) page.
+
+`sluice update` updates any of them in its own way, each download checked against the release's
+`checksums_sha256.txt`: a jar is replaced; the rpm or deb is upgraded from its signed repository by dnf or apt, or,
+without that repository, the release's package installed (as root, by `sudo` on a terminal, `pkexec` off one); the
+MSI's installer is run, an unzipped `sluice-windows.zip` unpacked over, and Scoop's install left to
+`scoop update sluice`. On Windows the last step waits until every sluice of that install has ended, since a running
+program's files are locked.
 
 Every install holds both the command, `sluice`, and the same releases in a window, `sluice-desktop` (sluice in the
 desktop's menu or the Start menu).

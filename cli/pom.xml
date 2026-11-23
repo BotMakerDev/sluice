@@ -65,6 +65,9 @@
                                     <manifestEntries>
                                         <Implementation-Title>sluice</Implementation-Title>
                                         <Implementation-Version>${project.version}</Implementation-Version>
+                                        <!-- The repository whose releases sluice update follows: the parent's url,
+                                             since an inherited one gets the artifactId appended. -->
+                                        <Implementation-URL>${project.parent.url}</Implementation-URL>
                                     </manifestEntries>
                                 </transformer>
                             </transformers>

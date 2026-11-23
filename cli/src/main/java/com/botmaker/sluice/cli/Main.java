@@ -5,6 +5,7 @@ package com.botmaker.sluice.cli;
 
 import com.botmaker.sluice.Refusal;
 import com.botmaker.sluice.execute.Release;
+import com.botmaker.sluice.update.SelfUpdate;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.IVersionProvider;
@@ -33,7 +34,7 @@ import java.util.stream.Stream;
  */
 @Command(name = "sluice", mixinStandardHelpOptions = true, versionProvider = Main.ManifestVersion.class,
         subcommands = {Commands.Preview.class, Commands.Cut.class, Commands.Why.class, Commands.Resume.class,
-            Commands.Status.class, Commands.SyncPins.class, GraphCommand.class},
+            Commands.Status.class, Commands.SyncPins.class, GraphCommand.class, UpdateCommand.class},
         description = "Release a Maven project split over the git submodules of one umbrella: each module tagged in "
                 + "dependency order, its dependents' pins moved, every module back on its next snapshot.",
         exitCodeListHeading = "%nExit codes:%n",
@@ -64,6 +65,7 @@ public final class Main implements Callable<Integer> {
     public static void main(String[] args) {
         PrintWriter out = new PrintWriter(System.out, true);
         PrintWriter err = new PrintWriter(System.err, true);
+        SelfUpdate.finishPending(Main.class);
         System.exit(run(args, out, err, Engine.REAL));
     }
 
@@ -128,7 +130,7 @@ public final class Main implements Callable<Integer> {
     @Override
     public Integer call() {
         throw new ParameterException(spec.commandLine(),
-                "say what to do: preview, release, why, resume, status, sync-pins or graph");
+                "say what to do: preview, release, why, resume, status, sync-pins, graph or update");
     }
 
     /**

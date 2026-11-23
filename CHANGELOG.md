@@ -7,6 +7,14 @@ All notable changes to this project are documented here, in the format of
 
 ### Added
 
+- **`sluice update [--check]`**: this sluice to its latest release, the way it was installed (core's `update`
+  package): a jar of the user's replaced; the rpm or deb upgraded from its signed repository by dnf or apt, or without
+  it the release's package installed, as root (`sudo` on a terminal, `pkexec` off one); on Windows, once every sluice
+  of the install has ended, the MSI's installer run, an unzipped `sluice-windows.zip` unpacked over, or
+  `scoop update sluice` run, the last two in a window of their own. Each download is checked against the
+  release's new `checksums_sha256.txt` first; a release without one is refused before anything is downloaded.
+  `--check` says the installed and latest versions and how it would install. The jar's manifest names the repository
+  (`Implementation-URL`).
 - `PinMoves.Goals`: a caller replaces how `versions:set` and `versions:set-property` run (`Goals.maven` the default).
   `Release.Wiring` takes one in place of its Maven arguments.
 

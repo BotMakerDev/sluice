@@ -8,6 +8,7 @@ import com.botmaker.sluice.execute.Event;
 import com.botmaker.sluice.execute.Release;
 import com.botmaker.sluice.execute.Release.Options;
 import com.botmaker.sluice.execute.Release.Outcome;
+import com.botmaker.sluice.update.SelfUpdate;
 
 import java.nio.file.Path;
 import java.util.function.BooleanSupplier;
@@ -43,4 +44,9 @@ public interface Engine {
     Outcome resume(Path umbrella, Options options, BooleanSupplier stop, Consumer<Event> events);
 
     Release.Status syncPins(Path umbrella, boolean execute, Consumer<Event> events);
+
+    /** This sluice's update: the install it runs from, against its latest release. */
+    default SelfUpdate selfUpdate() {
+        return SelfUpdate.of(Main.class);
+    }
 }

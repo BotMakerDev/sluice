@@ -9,6 +9,7 @@ import com.botmaker.sluice.execute.Release.Options;
 import com.botmaker.sluice.execute.Release.Outcome;
 import com.botmaker.sluice.execute.ReleaseFixture.Flaky;
 import com.botmaker.sluice.testing.FixtureUmbrella;
+import com.botmaker.sluice.update.SelfUpdate;
 
 import java.nio.file.Path;
 import java.util.Set;
@@ -19,6 +20,17 @@ import java.util.function.Consumer;
 public final class LocalEngine implements Engine {
 
     private final Flaky target = new Flaky();
+
+    /** What {@code sluice update} runs; a test sets it, so none reaches GitHub. */
+    public SelfUpdate selfUpdate;
+
+    @Override
+    public SelfUpdate selfUpdate() {
+        if (selfUpdate == null) {
+            throw new IllegalStateException("a test of sluice update sets LocalEngine.selfUpdate");
+        }
+        return selfUpdate;
+    }
 
     /** The releases, as {@code artifactId:tag}, whose build the target says failed. */
     public Set<String> failing() {

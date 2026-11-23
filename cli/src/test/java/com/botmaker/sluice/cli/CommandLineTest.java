@@ -5,6 +5,10 @@ package com.botmaker.sluice.cli;
 
 import com.botmaker.sluice.execute.LocalEngine;
 import com.botmaker.sluice.testing.FixtureUmbrella;
+import com.botmaker.sluice.update.Host;
+import com.botmaker.sluice.update.Install;
+import com.botmaker.sluice.update.Releases;
+import com.botmaker.sluice.update.SelfUpdate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -13,6 +17,8 @@ import java.io.StringWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -98,6 +104,39 @@ class CommandLineTest {
         assertEquals(Main.OK, sluice(engine, umbrella, "sync-pins", "--dry-run").code());
         assertEquals(Main.OK, sluice(engine, "--help").code());
         assertEquals(Main.OK, sluice(engine, "release", "--help").code());
+    }
+
+    @Test
+    void updateSaysWhyItCannotAndCheckSaysWhereItStands() {
+        LocalEngine engine = new LocalEngine();
+        Releases releases = new Releases() {
+            @Override
+            public Optional<Latest> latest() {
+                return Optional.of(new Latest("v9.0.0", Map.of()));
+            }
+
+            @Override
+            public void download(String url, Path to) {
+                throw new AssertionError("nothing is downloaded");
+            }
+
+            @Override
+            public String text(String url) {
+                throw new AssertionError("nothing is fetched");
+            }
+        };
+        engine.selfUpdate = new SelfUpdate(releases, Host.SYSTEM, new Install.Unmanaged("an IDE run"),
+                Optional.of("0.4.2"));
+
+        Ran update = sluice(engine, "update");
+        assertEquals(Main.REFUSED, update.code(), update.toString());
+        assertTrue(update.err().contains("refused: an IDE run"), update.toString());
+
+        Ran check = sluice(engine, "update", "--check");
+        assertEquals(Main.OK, check.code(), check.toString());
+        assertTrue(check.out().contains("sluice 0.4.2; the latest release is v9.0.0: sluice update installs it"),
+                check.toString());
+        assertTrue(check.out().contains("not updated here: an IDE run"), check.toString());
     }
 
     @Test

@@ -15,4 +15,7 @@ A release tool for a Maven project split over the git submodules of one umbrella
 - **Shell to `git` and `mvn`**, never embed them. Versions move only through `versions-maven-plugin`.
 - **A gate that cannot run is `SKIPPED`, never `OK`**; `--force` never lifts a `SKIPPED`.
 - **Linux and Windows.** A command is an argument list, never a shell line, unless the config gives a string.
+- **`update` is not a release** (2026-11-23): `sluice update` changes the install, not an umbrella, so it runs
+  through its own `update.Host`, not `Runner`, and has no preview but `--check`. Its Windows steps after the
+  process ends are PowerShell scripts built in code, each path a single-quoted literal.
 - Tests build their own umbrella with `FixtureUmbrella`; none reads a real checkout.

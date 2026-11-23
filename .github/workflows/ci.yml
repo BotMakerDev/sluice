@@ -162,6 +162,8 @@ jobs:
         run: |
           gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes ""
+          # sluice update checks every download against this before it installs anything.
+          (cd dist && sha256sum -- * > checksums_sha256.txt)
           gh release upload "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --clobber dist/*
 
   # On a tag, after the release has its packages: the signed dnf and apt repositories and install.sh on this
