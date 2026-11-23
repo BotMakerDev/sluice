@@ -11,6 +11,7 @@ import com.botmaker.sluice.Refusal;
 import com.botmaker.sluice.Runner;
 import com.botmaker.sluice.Version;
 import com.botmaker.sluice.config.Config;
+import com.botmaker.sluice.config.Config.Place;
 import com.botmaker.sluice.config.Config.StepPoint;
 import com.botmaker.sluice.config.ConfigLoader;
 import com.botmaker.sluice.decide.ChangeKind;
@@ -21,6 +22,7 @@ import com.botmaker.sluice.decide.Plan;
 import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.decide.Tags;
 import com.botmaker.sluice.execute.ReleaseState.Entry;
+import com.botmaker.sluice.gate.BuildsAtPinsGate;
 import com.botmaker.sluice.gate.CleanGate;
 import com.botmaker.sluice.gate.GateVerdict;
 import com.botmaker.sluice.gate.Gates;
@@ -47,6 +49,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +58,7 @@ import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -127,12 +131,20 @@ public final class Release {
     /** What a run reaches outside itself, so a test can put local stand-ins there. */
     record Wiring(Function<Config, Function<Module, PublishTarget>> targets, Supplier<Optional<GitHub>> github,
                   Function<BooleanSupplier, Sleeper> sleeper, List<String> mavenArgs, Clock clock,
-                  AssetPins.Fetch fetch) {
+                  AssetPins.Fetch fetch, Function<Function<Module, PublishTarget>, AtPins> atPins) {
 
         static Wiring real() {
             return new Wiring(Targets::of, GitHub::fromEnvironment, Sleeper::real, List.of(),
-                    Clock.systemDefaultZone(), AssetPins.Fetch.real());
+                    Clock.systemDefaultZone(), AssetPins.Fetch.real(), targets -> new BuildsAtPinsGate(targets,
+                            List.of(), Optional.of(BuildsAtPinsGate.lastingRepository()))::build);
         }
+    }
+
+    /** A module's {@code HEAD} built with the pins its release commit gives it; empty when none could be made. */
+    @FunctionalInterface
+    interface AtPins {
+
+        Optional<GateVerdict> build(Module module, Map<Pin, String> pins, Graph graph);
     }
 
     /**
@@ -150,6 +162,25 @@ public final class Release {
         Config config = ConfigLoader.load(umbrella);
         Graph graph = Graph.build(UmbrellaLayout.of(umbrella), config);
         Plan plan = Decider.decide(graph, config, requests, options.dependents(config));
+        if (options.execute() && !plan.releasing().isEmpty()) {
+            Runner runner = new Runner(false, line -> events.accept(new Event.Line(line)), stop);
+            boolean repaired;
+            try (Lock ignored = Lock.take(umbrella, runner::say)) {
+                repaired = repair(umbrella, graph, config, plan, runner, wiring);
+            }
+            if (repaired) {
+                // What the repair committed or pulled may change what is decided: decide again. A tag is final,
+                // so a plan other than the one previewed is not cut: the operator previews it first.
+                config = ConfigLoader.load(umbrella);
+                graph = Graph.build(UmbrellaLayout.of(umbrella), config);
+                Plan previewed = plan;
+                plan = Decider.decide(graph, config, requests, options.dependents(config));
+                if (!cuts(plan).equals(cuts(previewed))) {
+                    throw new Refusal("what the run repaired changed what it would cut, from " + cuts(previewed)
+                            + " to " + cuts(plan) + ": preview again, then release");
+                }
+            }
+        }
         Session session = new Session(umbrella, config, graph, plan, options, stop, events, wiring);
         List<Entry> entries = plan.releasing().entrySet().stream()
                 .map(e -> new Entry(e.getKey().name(), e.getValue(), Stage.DECIDED, "")).toList();
@@ -272,10 +303,61 @@ public final class Release {
         }
     }
 
+    /** Each module a plan releases and the version it cuts, by name, for comparing two plans. */
+    private static Map<String, String> cuts(Plan plan) {
+        Map<String, String> cuts = new LinkedHashMap<>();
+        plan.releasing().forEach((module, version) -> cuts.put(module.name(), version.toString()));
+        return cuts;
+    }
+
+    /**
+     * What a run mends before it gates, rather than refusing for it: a module it releases that is clean on its
+     * branch and only behind its origin is fast-forwarded; the stale pom pins of a clean module it releases are
+     * moved and committed, locally: the {@code ci} gate pushes them, once the gates that cannot be repaired have
+     * passed. A module it does not release is left alone; what is not clean, or diverged, is left for the gates to
+     * refuse.
+     *
+     * @return whether anything changed
+     */
+    private static boolean repair(Path umbrella, Graph graph, Config config, Plan plan, Runner runner,
+                                  Wiring wiring) {
+        String branch = config.branch();
+        boolean changed = false;
+        for (Module module : plan.releasing().keySet()) {
+            Path dir = module.dir().dir();
+            if (CleanGate.repairable(dir, branch) && runner.git(dir, "fetch", "--quiet", "origin", branch).ok()
+                    && CleanGate.fastForwards(dir, branch)) {
+                runner.say(module + ": behind origin/" + branch + ", fast-forwarding it");
+                changed |= runner.git(dir, "merge", "-q", "--ff-only", "refs/remotes/origin/" + branch).ok();
+            }
+        }
+        // Pins are read from the fast-forwarded poms: an upstream pulled forward is at its origin's version now.
+        Graph pulled = changed ? Graph.build(UmbrellaLayout.of(umbrella), ConfigLoader.load(umbrella)) : graph;
+        Set<String> releasing = plan.releasing().keySet().stream().map(Module::name).collect(Collectors.toSet());
+        Synced synced = sync(pulled, runner, wiring, module -> releasing.contains(module.name())
+                && CleanGate.repairable(module.dir().dir(), branch));
+        return changed || !synced.moved().isEmpty();
+    }
+
     private static Status syncPins(Graph graph, Runner runner, Wiring wiring) {
+        Synced synced = sync(graph, runner, wiring, module -> true);
+        return !synced.all() ? Status.STOPPED : runner.dryRun() ? Status.PREVIEWED : Status.DONE;
+    }
+
+    /**
+     * The modules whose pins moved, and whether every one {@code which} picks that needed it was moved.
+     */
+    private record Synced(List<Module> moved, boolean all) {
+    }
+
+    private static Synced sync(Graph graph, Runner runner, Wiring wiring, Predicate<Module> which) {
         PinMoves moves = new PinMoves(runner, wiring.mavenArgs());
         boolean all = true;
+        List<Module> moved = new ArrayList<>();
         for (Module module : graph.modules()) {
+            if (!which.test(module)) {
+                continue;
+            }
             List<Move> stale = new ArrayList<>();
             for (Edge edge : graph.upstreams(module)) {
                 Optional<String> main = edge.upstream().version();
@@ -296,14 +378,16 @@ public final class Release {
             }
             try {
                 Session.moveAll(moves, stale);
-                Session.commitFiles(runner, module, stale, "pins synced to their upstreams' main");
+                if (Session.commitFiles(runner, module, stale, "pins synced to their upstreams' main")) {
+                    moved.add(module);
+                }
             } catch (Refusal refusal) {
                 // One module's pins failing is no reason to leave the others stale.
                 runner.say(module + ": its pins were not synced: " + refusal.getMessage());
                 all = false;
             }
         }
-        return !all ? Status.STOPPED : runner.dryRun() ? Status.PREVIEWED : Status.DONE;
+        return new Synced(moved, all);
     }
 
     /** One pin and the value it moves to. */
@@ -327,7 +411,12 @@ public final class Release {
         private final Function<Module, PublishTarget> targets;
         private final Optional<GitHub> github;
         private final Sleeper sleeper;
+        private final AtPins atPins;
         private final Map<Module, Version> released;
+        /** The modules this run waits on until their target serves them: only those can be built against. */
+        private Set<Module> awaited = Set.of();
+        /** The modules a resumed run had already finished, at the version it released. */
+        private final Map<Module, Version> finished = new HashMap<>();
         private final Map<Module, Optional<Version>> tagged = new HashMap<>();
         private final Set<Module> moved = new LinkedHashSet<>();
         private final List<Entry> entries = new ArrayList<>();
@@ -351,6 +440,7 @@ public final class Release {
             this.targets = wiring.targets().apply(config);
             this.github = wiring.github().get();
             this.sleeper = wiring.sleeper().apply(stop);
+            this.atPins = wiring.atPins().apply(targets);
             this.released = plan.releasing();
             log.decided(plan, config.tagPattern());
             events.accept(new Event.Decided(plan));
@@ -394,14 +484,40 @@ public final class Release {
                 save(ReleaseState.Status.RUNNING);
             }
             Set<Module> owed = Waits.owed(plan, graph, TagOrder.of(graph, config), targets);
+            awaited = new HashSet<>(options.waitForTargets() ? owed : Set.of());
+            // A module a resumed run already finished is out of its plan, but published (waited on, if the run
+            // waits): what pins it builds against it.
+            for (Entry entry : entries) {
+                if (entry.stage() == Stage.SNAPSHOT) {
+                    Module module = module(entry.module());
+                    finished.put(module, entry.version());
+                    if (options.waitForTargets()) {
+                        awaited.add(module);
+                    }
+                }
+            }
             boolean done = true;
+            // A module its target has not served yet holds back only what needs it; the rest goes on.
+            Set<Module> stuck = new LinkedHashSet<>();
             for (int at = 0; at < entries.size(); at++) {
                 if (entries.get(at).stage() == Stage.SNAPSHOT) {
                     continue;
                 }
                 Module module = module(entries.get(at).module());
+                Optional<Module> waitsFor = stuck.stream().filter(upstream -> needs(module, upstream)).findFirst();
+                if (waitsFor.isPresent()) {
+                    runner.say(module + ": waits for " + waitsFor.get() + ", not published yet");
+                    entries.set(at, entries.get(at).at(entries.get(at).stage(), "waits for " + waitsFor.get()
+                            + ": resume goes on"));
+                    done = false;
+                    continue;
+                }
                 try {
-                    if (advance(at, module, owed.contains(module)) != Stage.SNAPSHOT) {
+                    Stage reached = advance(at, module, owed.contains(module));
+                    if (reached == Stage.PUSHED && !runner.stopping()) {
+                        stuck.add(module);
+                        done = false;
+                    } else if (reached != Stage.SNAPSHOT) {
                         done = false;
                         break;
                     }
@@ -434,6 +550,67 @@ public final class Release {
             return new Outcome(outcome, base.map(b -> sibling(b, ".md")), base.map(b -> sibling(b, ".json")));
         }
 
+        /**
+         * Builds {@code module} at the pins its release commit gives it, when an upstream it pins in a pom is
+         * released by this run: the gate could not, the upstream not published then. A build that fails stops the
+         * run before the release commit; resume builds again.
+         */
+        private void buildAtPins(Module module) {
+            List<Edge> pinned = graph.upstreams(module).stream().filter(Edge::pinnedInAPom).toList();
+            Map<Module, Version> ours = new HashMap<>(finished);
+            ours.putAll(released);
+            if (runner.dryRun() || module.pom().isEmpty()
+                    || pinned.stream().noneMatch(edge -> ours.containsKey(edge.upstream()))) {
+                return;
+            }
+            // An upstream not waited on (--no-wait, or a target this module does not resolve from) may not be
+            // served yet: a build against it would fail for that alone.
+            Optional<Module> unserved = pinned.stream().map(Edge::upstream)
+                    .filter(upstream -> ours.containsKey(upstream) && !awaited.contains(upstream)).findFirst();
+            if (unserved.isPresent()) {
+                runner.say("    " + module + ": not built at its pins (" + unserved.get() + " was not waited on)");
+                return;
+            }
+            Map<Pin, String> pins = BuildsAtPinsGate.pins(pinned, upstream -> ours.containsKey(upstream)
+                    ? ours.get(upstream)
+                    : plan.decision(upstream).map(Decision::base).orElse(Version.ZERO), targets, config.tagPattern());
+            runner.say(module + ": building at its pins");
+            Optional<GateVerdict> built = atPins.build(module, pins, graph);
+            if (built.isEmpty()) {
+                runner.say("    " + module + ": not built at its pins (no build could be made)");
+            } else if (built.get().status() == GateVerdict.Status.REFUSED) {
+                throw new Refusal(built.get().refusal());
+            }
+        }
+
+        /**
+         * Whether {@code module} must wait for {@code upstream}: it depends on it, or {@code sluice.yml} places it
+         * after it, or last, directly or through other modules.
+         */
+        private boolean needs(Module module, Module upstream) {
+            Set<Module> seen = new HashSet<>();
+            List<Module> next = new ArrayList<>(List.of(module));
+            while (!next.isEmpty()) {
+                Module at = next.removeLast();
+                Optional<Place> place = config.module(at.name()).place();
+                if (place.filter(Place.Last.class::isInstance).isPresent()) {
+                    return true;
+                }
+                List<Module> before = new ArrayList<>(graph.upstreams(at).stream().map(Edge::upstream).toList());
+                place.filter(Place.After.class::isInstance)
+                        .flatMap(p -> graph.module(((Place.After) p).module())).ifPresent(before::add);
+                for (Module earlier : before) {
+                    if (earlier.equals(upstream)) {
+                        return true;
+                    }
+                    if (seen.add(earlier)) {
+                        next.add(earlier);
+                    }
+                }
+            }
+            return false;
+        }
+
         /** Takes one module from the stage it is at as far as it goes; the stage it ends at. */
         private Stage advance(int at, Module module, boolean owed) {
             Version version = entries.get(at).version();
@@ -442,6 +619,7 @@ public final class Release {
             moved.add(module);
             if (stage == Stage.DECIDED) {
                 stopIfAsked();
+                buildAtPins(module);
                 releaseCommit(module, version, facts);
                 stage = reach(at, Stage.RELEASE_COMMITTED, "");
             }
@@ -455,7 +633,10 @@ public final class Release {
                 must(runner.git(module.dir().dir(), "push", "-q", "--atomic", "origin", config.branch(),
                         "refs/tags/" + version.tag(config.tagPattern())), module + ": the push");
                 GitHubRelease.create(runner, github, config, module, version, facts);
-                steps.run(StepPoint.AFTER_TAG, module, facts, runner);
+                steps.run(StepPoint.AFTER_TAG, module, facts, runner, entries.get(at).steps(), done -> {
+                    entries.set(at, entries.get(at).stepsDone(done));
+                    save(ReleaseState.Status.RUNNING);
+                });
                 stage = reach(at, Stage.PUSHED, "");
             }
             if (stage == Stage.PUSHED) {

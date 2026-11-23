@@ -51,7 +51,7 @@ public final class CleanGate implements Gate {
                         + "\n     Commit or stash them: the release commits and tags what is committed."));
             }
             if (on.equals(Optional.of(branch))) {
-                behind(module, dir, branch).ifPresent(verdicts::add);
+                behind(module, dir, branch, ctx.runner().dryRun()).ifPresent(verdicts::add);
             }
         }
         if (verdicts.isEmpty() && !ctx.plan().releasing().isEmpty()) {
@@ -60,7 +60,24 @@ public final class CleanGate implements Gate {
         return verdicts;
     }
 
-    private Optional<GateVerdict> behind(Module module, Path dir, String branch) {
+    /**
+     * Whether a run may change {@code dir} itself, pulling it or committing a pin: it is on {@code branch} with no
+     * tracked file uncommitted.
+     */
+    public static boolean repairable(Path dir, String branch) {
+        Proc.Result status = Git.run(dir, "status", "--porcelain", "--untracked-files=no");
+        return Git.branch(dir).equals(Optional.of(branch)) && status.ok() && status.lines().isEmpty();
+    }
+
+    /** Whether {@code dir}'s {@code HEAD} is behind its fetched {@code origin/branch} and can fast-forward to it. */
+    public static boolean fastForwards(Path dir, String branch) {
+        String remote = "refs/remotes/origin/" + branch;
+        return !Git.line(dir, "rev-list", "--count", "HEAD.." + remote).orElse("0").equals("0")
+                && Git.run(dir, "merge-base", "--is-ancestor", "HEAD", remote).ok();
+    }
+
+    /** @param runnerDryRun a preview: what a run fast-forwards before gating is said, not refused */
+    private Optional<GateVerdict> behind(Module module, Path dir, String branch, boolean runnerDryRun) {
         if (!Git.run(dir, "fetch", "--quiet", "origin", branch).ok()) {
             return Optional.of(skipped(module + ": origin did not answer, not checked against its remote"));
         }
@@ -70,6 +87,10 @@ public final class CleanGate implements Gate {
         }
         if (count.get().equals("0")) {
             return Optional.empty();
+        }
+        if (runnerDryRun && repairable(dir, branch) && fastForwards(dir, branch)) {
+            return Optional.of(skipped(module + " is " + count.get() + " commit(s) behind origin/" + branch
+                    + ": a run fast-forwards it first; not checked against its remote"));
         }
         return Optional.of(refused(module + " is " + count.get() + " commit(s) behind origin/" + branch,
                 "     git -C " + module + " pull --ff-only"));

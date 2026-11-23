@@ -15,6 +15,7 @@ import com.botmaker.sluice.spi.Step;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.IntConsumer;
 
 /** The project's steps: each a command run at its point of a module's release, through the run's runner. */
 final class StepRunner {
@@ -30,9 +31,24 @@ final class StepRunner {
 
     /** Runs every step of {@code at} in {@code module}'s release; a step that fails stops the release. */
     void run(StepPoint at, Module module, Map<String, String> facts, Runner runner) {
+        run(at, module, facts, runner, 0, done -> { });
+    }
+
+    /**
+     * The same, skipping the first {@code done} of them, which an earlier run ran; {@code ran} is told how many
+     * are done after each one, before the next starts.
+     */
+    void run(StepPoint at, Module module, Map<String, String> facts, Runner runner, int done, IntConsumer ran) {
+        int index = 0;
         for (Step step : steps) {
             if (step.at() == at && step.runsIn(module)) {
+                index++;
+                if (index <= done) {
+                    runner.say("    the " + at.id() + " step " + index + " of " + module + " ran before: not again");
+                    continue;
+                }
                 step.run(module, facts, runner);
+                ran.accept(index);
             }
         }
     }

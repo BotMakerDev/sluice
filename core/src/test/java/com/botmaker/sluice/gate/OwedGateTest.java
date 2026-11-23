@@ -46,9 +46,10 @@ class OwedGateTest {
         GateVerdict verdict = only(check(new OwedGate(), umbrella, Config.defaults(), "a"));
 
         assertEquals(Status.REFUSED, verdict.status());
-        assertTrue(verdict.line().contains("b is owed a release: a releases"), verdict.line());
-        assertTrue(verdict.refusal().contains("--module b"), verdict.refusal());
-        assertTrue(verdict.refusal().contains("--with-dependents"), verdict.refusal());
+        assertTrue(verdict.line().startsWith("owed a release: b (pins a, "), verdict.line());
+        assertTrue(verdict.line().endsWith("; release them too: sluice --module a=1.0.1 --module b=patch, "
+                + "or add --no-dependents"), verdict.line());
+        assertEquals(verdict.line(), verdict.refusal(), "one line, not said twice");
     }
 
     @Test

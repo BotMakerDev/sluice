@@ -153,7 +153,8 @@ public final class BuildsAtPinsGate implements Gate {
                                 .map(upstream -> upstream + " is published nowhere a build resolves it from")
                                 .findFirst());
                 if (unbuildable.isPresent()) {
-                    verdicts.add(skipped(module + ": not built at its pins (" + unbuildable.get() + ")"));
+                    verdicts.add(skipped(module + ": not built at its pins here (" + unbuildable.get()
+                            + "); a run builds it at them just before its release commit"));
                     continue;
                 }
                 Map<Pin, String> pins = pins(ctx, pinned);
@@ -183,6 +184,28 @@ public final class BuildsAtPinsGate implements Gate {
             }
         }
         return verdicts;
+    }
+
+    /**
+     * {@code module}'s {@code HEAD} built with {@code pins}, as the gate builds it: what a run does just before a
+     * module's release commit, once the upstreams it releases are published. Empty when no build could be made.
+     */
+    public Optional<GateVerdict> build(Module module, Map<Pin, String> pins, Graph graph) {
+        if (pins.isEmpty() || !Proc.onPath("mvn")) {
+            return Optional.empty();
+        }
+        Path repository = null;
+        try {
+            repository = lasting.isPresent() ? purged(Files.createDirectories(lasting.get()), graph)
+                    : Files.createTempDirectory("sluice-repository-");
+            return compile(module, pins, repository).map(run -> verdict(module, pins, run));
+        } catch (IOException e) {
+            return Optional.empty();
+        } finally {
+            if (repository != null && lasting.isEmpty()) {
+                delete(repository);
+            }
+        }
     }
 
     /** A refusal for each pinned upstream whose repository the module's poms do not declare. */
@@ -257,13 +280,23 @@ public final class BuildsAtPinsGate implements Gate {
 
     /** Each pom pin and the release it would name; an upstream never released has none. */
     private Map<Pin, String> pins(GateContext ctx, List<Edge> pinned) {
+        return pins(pinned, upstream -> ctx.plan().decision(upstream).map(Decision::base).orElse(Version.ZERO),
+                targets, ctx.config().tagPattern());
+    }
+
+    /**
+     * Each pom pin of {@code pinned} and the release it names, {@code version} giving each upstream's; an
+     * upstream at {@link Version#ZERO} has none.
+     */
+    public static Map<Pin, String> pins(List<Edge> pinned, Function<Module, Version> version,
+                                        Function<Module, PublishTarget> targets, String tagPattern) {
         Map<Pin, String> pins = new LinkedHashMap<>();
         for (Edge edge : pinned) {
-            Version newest = ctx.plan().decision(edge.upstream()).map(Decision::base).orElse(Version.ZERO);
+            Version newest = version.apply(edge.upstream());
             if (newest.equals(Version.ZERO)) {
                 continue;
             }
-            String release = targets.apply(edge.upstream()).spelling().spell(newest, ctx.config().tagPattern());
+            String release = targets.apply(edge.upstream()).spelling().spell(newest, tagPattern);
             for (Pin pin : edge.pins()) {
                 if (!(pin instanceof Pin.Text)) {
                     pins.put(pin, release);

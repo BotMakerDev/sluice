@@ -4,6 +4,7 @@
 package com.botmaker.sluice.gate;
 
 import com.botmaker.sluice.model.Edge;
+import com.botmaker.sluice.model.Pin;
 import com.botmaker.sluice.spi.Gate;
 import com.botmaker.sluice.spi.GateContext;
 import com.botmaker.sluice.status.ModuleStatus;
@@ -35,7 +36,16 @@ public final class PinsAtMainGate implements Gate {
             }
             for (PinState pin : ModuleStatus.pins(edge)) {
                 checked++;
-                if (!pin.current()) {
+                // A run moves a stale pom pin of a clean module it releases before it gates (Release.repair);
+                // text, and a module it does not release, it leaves.
+                if (!pin.current() && ctx.runner().dryRun() && !(pin.pin() instanceof Pin.Text)
+                        && ctx.plan().releasing().containsKey(edge.downstream())
+                        && CleanGate.repairable(edge.downstream().dir().dir(), branch)) {
+                    verdicts.add(skipped(edge.downstream() + " pins " + edge.upstream() + " at "
+                            + pin.held().orElse("nothing readable") + ", and " + edge.upstream() + " is at "
+                            + pin.upstreamVersion().orElseThrow() + " on " + branch
+                            + ": a run moves and commits it first; not checked"));
+                } else if (!pin.current()) {
                     verdicts.add(refused(edge.downstream() + " pins " + edge.upstream() + " at "
                                     + pin.held().orElse("nothing readable") + " in " + ctx.said(pin.pin().file())
                                     + ", and " + edge.upstream() + " is at " + pin.upstreamVersion().orElseThrow()

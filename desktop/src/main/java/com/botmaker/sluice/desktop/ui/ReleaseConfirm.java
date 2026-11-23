@@ -4,6 +4,7 @@
 package com.botmaker.sluice.desktop.ui;
 
 import com.botmaker.sluice.decide.Plan;
+import com.botmaker.sluice.gate.GateVerdict;
 import javafx.geometry.Insets;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
@@ -38,20 +39,34 @@ final class ReleaseConfirm {
                 .toList();
     }
 
+    /** One line per refusal {@code --force} lifted in the preview, for the operator to read before cutting. */
+    static List<String> forced(List<GateVerdict> verdicts) {
+        return verdicts.stream().filter(v -> v.status() == GateVerdict.Status.FORCED)
+                .map(v -> "    " + v.gate() + ": " + v.line())
+                .toList();
+    }
+
+    static boolean ask(Window owner, String header, List<String> tags, String warning) {
+        return ask(owner, header, tags, List.of(), warning);
+    }
+
     /**
      * Shows the dialog and answers whether the operator typed the word and pressed the button.
      *
      * @param header  the command line being run, as the dialog's header
      * @param tags    {@link #tags}; the caller has already refused an empty list
+     * @param forced  {@link #forced}: each refusal this run passes over, said in the dialog; none, nothing said
      * @param warning what this release does; the typing instruction is added here
      */
-    static boolean ask(Window owner, String header, List<String> tags, String warning) {
+    static boolean ask(Window owner, String header, List<String> tags, List<String> forced, String warning) {
         TextArea list = new TextArea(String.join("\n", tags));
         list.setEditable(false);
         list.getStyleClass().add("output-text");
         list.setPrefRowCount(Math.min(12, tags.size() + 1));
 
-        Label words = new Label(warning + "\n\nType " + WORD + " to enable the button.");
+        String passed = forced.isEmpty() ? ""
+                : "\n\n--force passes over these refusals:\n" + String.join("\n", forced);
+        Label words = new Label(warning + passed + "\n\nType " + WORD + " to enable the button.");
         words.setWrapText(true);
 
         TextField typed = new TextField();

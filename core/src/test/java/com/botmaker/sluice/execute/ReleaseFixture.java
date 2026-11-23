@@ -50,10 +50,15 @@ final class ReleaseFixture {
         return wiring(target, Assets.NONE);
     }
 
-    /** The same, the network's release assets {@code assets}. */
+    /** The same, the network's release assets {@code assets}; no module is built at its pins. */
     static Wiring wiring(PublishTarget target, AssetPins.Fetch assets) {
+        return wiring(target, assets, (module, pins, graph) -> Optional.empty());
+    }
+
+    /** The same, each build at the pins {@code atPins}'s. */
+    static Wiring wiring(PublishTarget target, AssetPins.Fetch assets, Release.AtPins atPins) {
         return new Wiring(config -> module -> target, Optional::empty, stop -> duration -> true, List.of("-o"),
-                CLOCK, assets);
+                CLOCK, assets, targets -> atPins);
     }
 
     /** Release assets by url, each the bytes it serves. */
@@ -110,7 +115,11 @@ final class ReleaseFixture {
     }
 
     static Outcome resume(FixtureUmbrella umbrella, PublishTarget target, List<String> lines) {
-        return Release.resume(umbrella.root(), EXECUTE, () -> false, event -> said(event, lines), wiring(target));
+        return resume(umbrella, wiring(target), lines);
+    }
+
+    static Outcome resume(FixtureUmbrella umbrella, Wiring wiring, List<String> lines) {
+        return Release.resume(umbrella.root(), EXECUTE, () -> false, event -> said(event, lines), wiring);
     }
 
     private static void said(Event event, List<String> lines) {

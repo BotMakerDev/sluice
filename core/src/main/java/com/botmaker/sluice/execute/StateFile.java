@@ -91,7 +91,8 @@ final class StateFile {
         String modules = state.modules().stream()
                 .map(e -> "    {\"module\": " + Json.quote(e.module()) + ", \"version\": "
                         + Json.quote(e.version().toString()) + ", \"stage\": " + Json.quote(e.stage().name())
-                        + ", \"detail\": " + Json.quote(e.detail()) + "}")
+                        + ", \"detail\": " + Json.quote(e.detail()) + (e.steps() == 0 ? "" : ", \"steps\": " + e.steps())
+                        + "}")
                 .collect(Collectors.joining(",\n"));
         return "{\n  \"status\": " + Json.quote(state.status().name()) + ",\n  \"modules\": [\n" + modules
                 + "\n  ]\n}\n";
@@ -112,7 +113,8 @@ final class StateFile {
                 entries.add(new Entry(text(entry, "module"),
                         Version.parse(text(entry, "version"))
                                 .orElseThrow(() -> new IllegalArgumentException("a version that is not x.y.z")),
-                        Stage.valueOf(text(entry, "stage")), text(entry, "detail")));
+                        Stage.valueOf(text(entry, "stage")), text(entry, "detail"),
+                        entry.get("steps") instanceof Number steps ? steps.intValue() : 0));
             }
             return new ReleaseState(Status.valueOf(text(map, "status")), entries);
         } catch (IOException e) {

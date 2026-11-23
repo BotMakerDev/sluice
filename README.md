@@ -18,6 +18,19 @@ previewed clean, 1 refused, 2 stopped partway (`--resume` goes on), 3 usage.
 
 A preview is the default. Nothing is tagged, pushed or written without `--execute`.
 
+A run repairs what it can before refusing, and a preview says what it would do:
+
+- A module whose upstream is released is owed a release: it is added at its next patch (`--no-dependents` leaves
+  it out, `owed: refuse` in `sluice.yml` refuses instead).
+- A module behind its origin with no change of its own is fast-forwarded; a pin behind its upstream's `main` is
+  moved and committed (the `ci` gate pushes it). If that changes what would be cut, the run refuses and asks for a
+  new preview.
+- A module ahead of its origin is pushed, then its CI is waited on (`ci-wait`, minutes). A red run that failed in
+  an upstream gone green since is rerun.
+- A module whose upstream the run releases is built at its new pins just before its release commit.
+- A module its target has not served in time holds back only the modules that need it; `--resume` goes on with
+  them, and runs no `after-tag` step twice.
+
 Configuration is an optional `sluice.yml` at the umbrella's root. Without one, sluice reads the graph from the
 poms, tags `v{version}` on `main`, and publishes nowhere.
 

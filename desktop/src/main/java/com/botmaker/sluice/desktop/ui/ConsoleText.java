@@ -59,9 +59,7 @@ final class ConsoleText {
     static List<String> verdict(GateVerdict verdict) {
         List<String> lines = new ArrayList<>(List.of("[" + verdict.status() + "] " + verdict.gate() + ": "
                 + verdict.line()));
-        if (verdict.status() == GateVerdict.Status.REFUSED && !verdict.refusal().isBlank()) {
-            verdict.refusal().lines().forEach(line -> lines.add("    " + line));
-        }
+        verdict.repair().forEach(line -> lines.add("    " + line));
         return lines;
     }
 

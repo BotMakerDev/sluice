@@ -8,7 +8,9 @@ import com.botmaker.sluice.model.Module;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -22,8 +24,16 @@ public record Links(Repo repo) {
     public record Link(String label, String url) {
     }
 
+    /** Reads git: never on the FX thread. */
     public static Optional<Links> of(Module module) {
         return Repo.ofCheckout(module.dir().dir()).map(Links::new);
+    }
+
+    /** Each module's, by its name; reads git once per module, so never on the FX thread. */
+    public static Map<String, Optional<Links>> of(List<Module> modules) {
+        Map<String, Optional<Links>> links = new LinkedHashMap<>();
+        modules.forEach(module -> links.put(module.name(), of(module)));
+        return links;
     }
 
     public String home() {

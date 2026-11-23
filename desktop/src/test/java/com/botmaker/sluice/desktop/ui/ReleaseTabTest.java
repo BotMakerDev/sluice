@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BooleanSupplier;
@@ -45,9 +46,16 @@ class ReleaseTabTest extends FxHeadless {
         final List<ReleaseSpec> previewed = new ArrayList<>();
         List<GateVerdict> verdicts = List.of(new GateVerdict("clean", GateVerdict.Status.OK, "every tree clean", ""));
         Optional<ReleaseState> resumable = Optional.empty();
+        /** A preview answers only once this is down: a test holds it to act while it runs. */
+        CountDownLatch hold = new CountDownLatch(0);
 
         @Override
         public Release.Preview preview(Path root, ReleaseSpec spec) {
+            try {
+                hold.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             previewed.add(spec);
             Umbrella read = Umbrella.open(root);
             Plan plan = Decider.decide(read.graph(), read.config(), spec.requests(),
@@ -122,6 +130,39 @@ class ReleaseTabTest extends FxHeadless {
 
         assertTrue(tab.executeButton().isDisabled());
         assertEquals("sluice --all minor", tab.commandLine());
+    }
+
+    @Test
+    void stopDropsAPreviewAndItsAnswerIsIgnored() throws TimeoutException {
+        backend.hold = new CountDownLatch(1);
+        interact(() -> tab.all().setSelected(true));
+        interact(() -> tab.previewButton().fire());
+        assertFalse(tab.stopButton().isDisabled());
+
+        interact(() -> tab.stopButton().fire());
+        // Its gates still run: no new preview until they end.
+        assertTrue(tab.previewButton().isDisabled());
+        backend.hold.countDown();
+        WaitForAsyncUtils.waitFor(20, TimeUnit.SECONDS, () -> !tab.previewButton().isDisabled());
+        settle();
+
+        assertTrue(tab.executeButton().isDisabled());
+        assertEquals("", tab.cut("a"));
+    }
+
+    @Test
+    void aPreviewWhoseFlagsChangedWhileItRanArmsNothing() throws TimeoutException {
+        backend.hold = new CountDownLatch(1);
+        interact(() -> tab.all().setSelected(true));
+        interact(() -> tab.previewButton().fire());
+        interact(() -> tab.level().setValue(Level.MINOR));
+
+        backend.hold.countDown();
+        WaitForAsyncUtils.waitFor(20, TimeUnit.SECONDS, () -> !tab.previewButton().isDisabled());
+        settle();
+
+        assertTrue(tab.executeButton().isDisabled());
+        assertEquals("", tab.cut("a"));
     }
 
     @Test

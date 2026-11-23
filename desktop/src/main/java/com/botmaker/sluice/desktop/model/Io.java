@@ -19,7 +19,13 @@ public final class Io {
 
     private static final AtomicInteger COUNT = new AtomicInteger();
 
-    private static final ExecutorService POOL = Executors.newCachedThreadPool(task -> {
+    /**
+     * At most this many at once: a refresh asks git and GitHub something per module, and an umbrella of thirty
+     * would otherwise start thirty processes together. A release holds one for its whole run.
+     */
+    private static final int THREADS = 8;
+
+    private static final ExecutorService POOL = Executors.newFixedThreadPool(THREADS, task -> {
         Thread thread = new Thread(task, "sluice-io-" + COUNT.incrementAndGet());
         thread.setDaemon(true);
         return thread;

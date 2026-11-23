@@ -34,11 +34,20 @@ public record ReleaseState(Status status, List<Entry> modules) {
      *
      * @param module its path in the umbrella
      * @param detail why it stopped there, when it did
+     * @param steps  how many of its {@code after-tag} steps are done, so a resume runs none twice
      */
-    public record Entry(String module, Version version, Stage stage, String detail) {
+    public record Entry(String module, Version version, Stage stage, String detail, int steps) {
+
+        public Entry(String module, Version version, Stage stage, String detail) {
+            this(module, version, stage, detail, 0);
+        }
 
         Entry at(Stage next, String why) {
-            return new Entry(module, version, next, why);
+            return new Entry(module, version, next, why, steps);
+        }
+
+        Entry stepsDone(int done) {
+            return new Entry(module, version, stage, detail, done);
         }
     }
 

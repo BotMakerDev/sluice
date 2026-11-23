@@ -74,9 +74,22 @@ class CleanGateTest {
     }
 
     @Test
-    void behindRemoteRefused() {
+    void behindRemotePreviewedAsFastForwarded() {
         umbrella.commit("a", "src/A.java", "class A {}\n").push("a");
         FixtureUmbrella.git(umbrella.dir("a"), "reset", "-q", "--hard", "HEAD~1");
+
+        GateVerdict verdict = only(verdicts());
+
+        assertEquals(Status.SKIPPED, verdict.status());
+        assertTrue(verdict.line().contains("1 commit(s) behind origin/main: a run fast-forwards it first"),
+                verdict.line());
+    }
+
+    @Test
+    void divergedFromItsRemoteRefused() {
+        umbrella.commit("a", "src/A.java", "class A {}\n").push("a");
+        FixtureUmbrella.git(umbrella.dir("a"), "reset", "-q", "--hard", "HEAD~1");
+        umbrella.commit("a", "src/Other.java", "class Other {}\n");
 
         GateVerdict verdict = only(verdicts());
 

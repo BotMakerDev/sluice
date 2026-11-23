@@ -9,6 +9,7 @@ import com.botmaker.sluice.testing.FixtureUmbrella;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static com.botmaker.sluice.testing.GateFixture.check;
@@ -31,8 +32,21 @@ class PinsAtMainGateTest {
     }
 
     @Test
-    void stalePinRefusedNamingPom() {
+    void stalePinOfACleanModulePreviewedAsMoved() {
         GateVerdict verdict = only(check(new PinsAtMainGate(), umbrella("1.0.0"), Config.defaults(), "b"));
+
+        assertEquals(Status.SKIPPED, verdict.status());
+        assertTrue(verdict.line().contains("b pins a at 1.0.0, and a is at 1.0.1-SNAPSHOT on main: a run moves "
+                + "and commits it first"), verdict.line());
+    }
+
+    @Test
+    void stalePinOfAChangedModuleRefusedNamingPom() throws Exception {
+        FixtureUmbrella umbrella = umbrella("1.0.0");
+        Files.writeString(umbrella.dir("b").resolve("pom.xml"),
+                Files.readString(umbrella.dir("b").resolve("pom.xml")) + "<!-- uncommitted -->\n");
+
+        GateVerdict verdict = only(check(new PinsAtMainGate(), umbrella, Config.defaults(), "b"));
 
         assertEquals(Status.REFUSED, verdict.status());
         assertTrue(verdict.line().contains("b pins a at 1.0.0 in b/pom.xml"), verdict.line());

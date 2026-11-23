@@ -3,6 +3,8 @@
 
 package com.botmaker.sluice.gate;
 
+import java.util.List;
+
 /**
  * What a gate answered about one thing it checked.
  *
@@ -27,6 +29,18 @@ public record GateVerdict(String gate, Status status, String line, String refusa
     /** Whether the release stops here. */
     public boolean stops() {
         return status == Status.REFUSED;
+    }
+
+    /**
+     * What a refusal says after its {@link #line}, one entry per line, for a printer that has shown the line
+     * already; nothing for any other verdict.
+     */
+    public List<String> repair() {
+        if (!stops()) {
+            return List.of();
+        }
+        String rest = refusal.startsWith(line) ? refusal.substring(line.length()) : refusal;
+        return (rest.startsWith("\n") ? rest.substring(1) : rest).lines().toList();
     }
 
     /** This refusal as {@code --force} leaves it; any other verdict unchanged. */

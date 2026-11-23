@@ -4,15 +4,23 @@
 package com.botmaker.sluice.execute;
 
 import com.botmaker.sluice.Level;
+import com.botmaker.sluice.Refusal;
 import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.execute.Release.Outcome;
+import com.botmaker.sluice.Spelling;
 import com.botmaker.sluice.execute.Release.Status;
+import com.botmaker.sluice.execute.Release.Wiring;
+import com.botmaker.sluice.spi.PublishTarget;
+import com.botmaker.sluice.testing.GateFixture.FixedTarget;
+import com.botmaker.sluice.execute.ReleaseFixture.Assets;
+import com.botmaker.sluice.gate.GateVerdict;
 import com.botmaker.sluice.testing.FixtureUmbrella;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,6 +30,7 @@ import static com.botmaker.sluice.execute.ReleaseFixture.config;
 import static com.botmaker.sluice.execute.ReleaseFixture.lines;
 import static com.botmaker.sluice.execute.ReleaseFixture.pinned;
 import static com.botmaker.sluice.execute.ReleaseFixture.read;
+import static com.botmaker.sluice.execute.ReleaseFixture.resume;
 import static com.botmaker.sluice.execute.ReleaseFixture.run;
 import static com.botmaker.sluice.execute.ReleaseFixture.served;
 import static com.botmaker.sluice.execute.ReleaseFixture.show;
@@ -33,6 +42,7 @@ import static com.botmaker.sluice.testing.PlainUmbrella.dep;
 import static com.botmaker.sluice.testing.PlainUmbrella.pom;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReleaseTest {
@@ -191,6 +201,52 @@ class ReleaseTest {
     }
 
     @Test
+    void resumeRunsNoAfterTagStepTwice() throws Exception {
+        FixtureUmbrella umbrella = FixtureUmbrella.create(tmp)
+                .module("a", pom("a", "1.0.1-SNAPSHOT", "")).tag("a", "v1.0.0")
+                .commit("a", "src/A.java", "class A {}\n").push("a");
+        Path first = tmp.resolve("first");
+        String steps = "steps:\n  - {at: after-tag, run: " + yamlList(probe(first, 0)) + "}\n"
+                + "  - {at: after-tag, run: %s}\n";
+        config(umbrella, steps.formatted(yamlList(probe(tmp.resolve("second"), 3))));
+        List<String> lines = lines();
+
+        Outcome stopped = run(umbrella, EXECUTE, served(), lines, "a");
+
+        assertEquals(Status.STOPPED, stopped.status(), String.join("\n", lines));
+        assertEquals(1, StateFile.read(stopped.state().orElseThrow()).modules().getFirst().steps());
+        Files.delete(first);
+        config(umbrella, steps.formatted(yamlList(probe(tmp.resolve("second"), 0))));
+
+        assertEquals(Status.DONE, resume(umbrella, served(), lines).status(), String.join("\n", lines));
+        assertFalse(Files.exists(first), "the first step ran before the stop, and not again");
+        assertTrue(Files.exists(tmp.resolve("second")));
+    }
+
+    @Test
+    void aModuleNotServedYetHoldsBackOnlyItsDependents() {
+        FixtureUmbrella umbrella = pinned(tmp)
+                .module("c", pom("c", "3.0.1-SNAPSHOT", "")).tag("c", "v3.0.0")
+                .commit("c", "src/C.java", "class C {}\n").push("c");
+        PublishTarget notYet = new FixedTarget(Spelling.TAG, Optional.empty(), PublishTarget.Served.NO);
+        Wiring wiring = new Wiring(config -> module -> module.name().equals("a") ? notYet : served(),
+                Optional::empty, stop -> duration -> true, List.of("-o"), ReleaseFixture.CLOCK, Assets.NONE,
+                targets -> (module, pins, graph) -> Optional.empty());
+        List<String> lines = lines();
+
+        Outcome stopped = run(umbrella, EXECUTE, wiring, lines, "a", "b", "c");
+
+        assertEquals(Status.STOPPED, stopped.status(), String.join("\n", lines));
+        assertEquals(List.of("v1.0.0", "v1.0.1"), tags(umbrella, "a"));
+        assertEquals(List.of("v0.1.0"), tags(umbrella, "b"), "b needs a, which is not served yet");
+        assertEquals(List.of("v3.0.0", "v3.0.1"), tags(umbrella, "c"), "c needs nothing of a");
+        assertTrue(lines.contains("b: waits for a, not published yet"), String.join("\n", lines));
+
+        assertEquals(Status.DONE, resume(umbrella, served(), lines).status(), String.join("\n", lines));
+        assertEquals(List.of("v0.1.0", "v0.1.1"), tags(umbrella, "b"));
+    }
+
+    @Test
     void previewGivesThePlanAndTheGatesOnly() {
         FixtureUmbrella umbrella = pinned(tmp);
         String pomBefore = read(umbrella.dir("b").resolve("pom.xml"));
@@ -258,6 +314,110 @@ class ReleaseTest {
         assertFalse(FixtureUmbrella.git(umbrella.dir("b"), "ls-tree", "-r", "--name-only", "HEAD").lines()
                 .contains(".project"));
         assertEquals("?? .project", FixtureUmbrella.git(umbrella.dir("b"), "status", "--porcelain").out().strip());
+    }
+
+    @Test
+    void runSyncsAStalePinOfACleanModuleBeforeItGates() {
+        FixtureUmbrella umbrella = pinned(tmp);
+        umbrella.commit("b", "pom.xml", read(umbrella.dir("b").resolve("pom.xml"))
+                .replace("<a.version>1.0.1-SNAPSHOT</a.version>", "<a.version>0.9.0</a.version>")).push("b");
+        List<String> lines = lines();
+
+        Outcome outcome = run(umbrella, EXECUTE, served(), lines, "a", "b");
+
+        assertEquals(Status.DONE, outcome.status(), String.join("\n", lines));
+        String log = FixtureUmbrella.git(umbrella.dir("b"), "log", "--format=%s", "origin/main").out();
+        assertTrue(log.contains("pins synced to their upstreams' main"), log);
+        assertTrue(show(umbrella, "b", "v0.1.1", "pom.xml").contains("<a.version>v1.0.1</a.version>"));
+    }
+
+    @Test
+    void runFastForwardsAModuleBehindItsOrigin() throws Exception {
+        FixtureUmbrella umbrella = pinned(tmp);
+        Path other = tmp.resolve("other");
+        FixtureUmbrella.git(tmp, "clone", "-q", tmp.resolve("remotes").resolve("a.git").toString(), other.toString());
+        FixtureUmbrella.git(other, "config", "user.email", "t@example.invalid");
+        FixtureUmbrella.git(other, "config", "user.name", "t");
+        Files.writeString(other.resolve("Elsewhere.java"), "class Elsewhere {}\n");
+        FixtureUmbrella.git(other, "add", "-A");
+        FixtureUmbrella.git(other, "commit", "-q", "-m", "pushed from elsewhere");
+        FixtureUmbrella.git(other, "push", "-q", "origin", "main");
+        List<String> lines = lines();
+
+        Outcome outcome = run(umbrella, EXECUTE, served(), lines, "a", "b");
+
+        assertEquals(Status.DONE, outcome.status(), String.join("\n", lines));
+        assertTrue(lines.contains("a: behind origin/main, fast-forwarding it"), String.join("\n", lines));
+        assertEquals("class Elsewhere {}\n", show(umbrella, "a", "v1.0.1", "Elsewhere.java"));
+    }
+
+    @Test
+    void noWaitBuildsNothingAtPinsItsUpstreamMayNotServeYet() {
+        FixtureUmbrella umbrella = pinned(tmp);
+        List<String> built = new ArrayList<>();
+        List<String> lines = lines();
+
+        Outcome outcome = run(umbrella, new Release.Options(true, false, Optional.empty(), false),
+                wiring(served(), Assets.NONE, (module, pins, graph) -> {
+                    built.add(module.name());
+                    return Optional.empty();
+                }), lines, "a", "b");
+
+        assertEquals(Status.DONE, outcome.status(), String.join("\n", lines));
+        assertEquals(List.of(), built);
+        assertTrue(lines.contains("    b: not built at its pins (a was not waited on)"), String.join("\n", lines));
+    }
+
+    @Test
+    void aFastForwardThatChangesWhatWouldBeCutRefusesBeforeAnyTag() throws Exception {
+        FixtureUmbrella umbrella = pinned(tmp);
+        // Elsewhere, b stops depending on a: once pulled, a release of a owes b nothing.
+        Path other = tmp.resolve("other");
+        FixtureUmbrella.git(tmp, "clone", "-q", tmp.resolve("remotes").resolve("b.git").toString(), other.toString());
+        FixtureUmbrella.git(other, "config", "user.email", "t@example.invalid");
+        FixtureUmbrella.git(other, "config", "user.name", "t");
+        Files.writeString(other.resolve("pom.xml"), pom("b", "0.1.1-SNAPSHOT", ""));
+        FixtureUmbrella.git(other, "commit", "-q", "-am", "drop a");
+        FixtureUmbrella.git(other, "push", "-q", "origin", "main");
+        List<String> lines = lines();
+
+        Refusal refused = assertThrows(Refusal.class, () -> run(umbrella, EXECUTE, served(), lines, "a"),
+                String.join("\n", lines));
+
+        assertTrue(refused.getMessage().contains("preview again"), refused.getMessage());
+        assertEquals(List.of("v1.0.0"), tags(umbrella, "a"));
+    }
+
+    @Test
+    void aModuleThatDoesNotBuildAtItsPinsStopsBeforeItsReleaseCommit() {
+        FixtureUmbrella umbrella = pinned(tmp);
+        List<String> built = new ArrayList<>();
+        GateVerdict broken = new GateVerdict("builds-at-pins", GateVerdict.Status.REFUSED,
+                "b does not build at the pins its tag would carry", "b does not build at the pins its tag would carry"
+                + "\n     [ERROR] cannot find symbol");
+        Release.AtPins failing = (module, pins, graph) -> {
+            built.add(module + " " + pins.values());
+            return Optional.of(broken);
+        };
+        List<String> lines = lines();
+
+        Outcome stopped = run(umbrella, EXECUTE, wiring(served(), Assets.NONE, failing), lines, "a", "b");
+
+        assertEquals(Status.STOPPED, stopped.status(), String.join("\n", lines));
+        assertEquals(List.of("b [v1.0.1]"), built);
+        assertEquals(List.of("v1.0.0", "v1.0.1"), tags(umbrella, "a"));
+        assertEquals(List.of("v0.1.0"), tags(umbrella, "b"));
+        assertTrue(lines.stream().anyMatch(line -> line.contains("[ERROR] cannot find symbol")),
+                String.join("\n", lines));
+
+        Outcome resumed = resume(umbrella, wiring(served(), Assets.NONE, (module, pins, graph) -> {
+            built.add(module + " again");
+            return Optional.empty();
+        }), lines);
+
+        assertEquals(Status.DONE, resumed.status(), String.join("\n", lines));
+        assertEquals(List.of("b [v1.0.1]", "b again"), built, String.join("\n", lines));
+        assertEquals(List.of("v0.1.0", "v0.1.1"), tags(umbrella, "b"));
     }
 
     /** {@code b} changed nothing of its own: the release writes its notes, the pin it moves. */

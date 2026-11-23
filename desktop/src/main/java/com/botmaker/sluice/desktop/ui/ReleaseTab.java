@@ -4,6 +4,7 @@
 package com.botmaker.sluice.desktop.ui;
 
 import com.botmaker.sluice.Level;
+import com.botmaker.sluice.decide.Decider;
 import com.botmaker.sluice.decide.Decision;
 import com.botmaker.sluice.desktop.model.Io;
 import com.botmaker.sluice.desktop.model.Links;
@@ -37,7 +38,10 @@ import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
-import javafx.scene.control.cell.TextFieldTableCell;
+import javafx.collections.FXCollections;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.cell.ComboBoxTableCell;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -45,14 +49,18 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 /**
  * Cuts a release: flags and a request per module, the same words the command takes; Preview runs the decide pass
@@ -62,12 +70,14 @@ import java.util.function.Consumer;
  */
 public final class ReleaseTab extends BorderPane {
 
+    private static final int OUTPUT_CAP = 400_000;
+
     private static final String WARNING = "Each tag is pushed and published. A pushed tag is final: a mistake is "
             + "repaired by the next release, never by moving the tag.";
 
-    private final Umbrella umbrella;
+    /** Read again after each run, which moves versions and pins. */
+    private Umbrella umbrella;
     private final ReleaseBackend backend;
-    private final Map<String, Optional<Links>> links = new LinkedHashMap<>();
 
     private final CheckBox all = new CheckBox("--all");
     private final ComboBox<Level> level = new ComboBox<>();
@@ -91,8 +101,15 @@ public final class ReleaseTab extends BorderPane {
     /** The spec the last clean preview was of; Execute… cuts only that. */
     private Optional<ReleaseSpec> armed = Optional.empty();
     private Optional<Release.Preview> previewed = Optional.empty();
-    /** A preview is running: no other starts until it answers. */
+    /** A preview is running: no other starts until it answers or Stop drops it. */
     private boolean previewing;
+    /** Which preview is the current one: an answer of an earlier, dropped one is ignored. */
+    private long previewRun;
+    /**
+     * A dropped preview's gates still run (git fetches, builds in the shared gate repository): nothing else starts
+     * until they end, or two would build in one repository at once.
+     */
+    private boolean droppedRunning;
     private ReleaseWatch watch;
     private final AtomicBoolean stopAsked = new AtomicBoolean();
     private Optional<ReleaseState> resumable = Optional.empty();
@@ -118,7 +135,8 @@ public final class ReleaseTab extends BorderPane {
         this.umbrella = umbrella;
         this.backend = backend;
         this.board = new ReleaseBoard(open);
-        board.setLinks(name -> links.computeIfAbsent(name, n -> umbrella.module(n).flatMap(Links::of)));
+        Io.async(() -> Links.of(umbrella.modules()))
+                .thenAccept(links -> Platform.runLater(() -> board.setLinks(links)));
         getStyleClass().add("release-tab");
 
         level.getItems().setAll(Level.values());
@@ -136,7 +154,7 @@ public final class ReleaseTab extends BorderPane {
             box.selectedProperty().addListener((o, was, is) -> specChanged());
         }
         force.getStyleClass().add("danger");
-        HBox flags = new HBox(12, all, level, dependents, force, noWait);
+        FlowPane flags = new FlowPane(12, 8, all, level, dependents, force, noWait);
         flags.setAlignment(Pos.CENTER_LEFT);
         flags.getStyleClass().add("flag-box");
 
@@ -147,7 +165,13 @@ public final class ReleaseTab extends BorderPane {
         kind.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().module.kind().id()));
         TableColumn<Row, String> request = new TableColumn<>("Request");
         request.setCellValueFactory(c -> c.getValue().request);
-        request.setCellFactory(TextFieldTableCell.forTableColumn());
+        // A level picked from the list, or a version typed into it.
+        request.setCellFactory(column -> {
+            ComboBoxTableCell<Row, String> cell = new ComboBoxTableCell<>(
+                    FXCollections.observableArrayList("", "patch", "minor", "major"));
+            cell.setComboBoxEditable(true);
+            return cell;
+        });
         request.setOnEditCommit(e -> {
             e.getRowValue().request.set(e.getNewValue() == null ? "" : e.getNewValue().strip());
             specChanged();
@@ -157,6 +181,7 @@ public final class ReleaseTab extends BorderPane {
         cut.setCellValueFactory(c -> c.getValue().cut);
         cut.setPrefWidth(260);
         table.getColumns().setAll(List.of(name, kind, request, cut));
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setEditable(true);
         table.setPlaceholder(new Label("No module in sluice.yml's umbrella."));
         umbrella.modules().forEach(module -> table.getItems().add(new Row(module)));
@@ -179,7 +204,14 @@ public final class ReleaseTab extends BorderPane {
         output.getStyleClass().add("output-text");
         output.setPrefRowCount(10);
 
-        VBox top = new VBox(8, flags, table, commandLine, buttons, banner, verdicts);
+        // Twenty verdicts would push the table off screen: they scroll in a bounded box.
+        ScrollPane verdictScroll = new ScrollPane(verdicts);
+        verdictScroll.setFitToWidth(true);
+        verdictScroll.setMaxHeight(160);
+        verdictScroll.getStyleClass().add("edge-to-edge");
+        status.setWrapText(true);
+        status.setMinWidth(0);
+        VBox top = new VBox(8, flags, table, commandLine, buttons, banner, verdictScroll);
         top.setPadding(new Insets(10));
         VBox.setVgrow(table, Priority.ALWAYS);
         VBox bottom = new VBox(8, board, output);
@@ -206,6 +238,28 @@ public final class ReleaseTab extends BorderPane {
     /** Pulses run only while this tab is on screen. */
     public void setShowing(boolean showing) {
         board.setAnimated(showing);
+        if (showing && !running()) {
+            // A run in a terminal may have left, or finished, a resumable one since.
+            refreshResumable();
+        }
+    }
+
+    /** Reads the umbrella again after a run: its rows start over, and any preview is of the old state. */
+    public void reopen() {
+        Path root = umbrella.root();
+        Io.async(() -> Umbrella.open(root)).whenComplete((reread, error) -> Platform.runLater(() -> {
+            if (error != null) {
+                status.setText("Could not read the umbrella again: " + Io.message(error));
+                return;
+            }
+            umbrella = reread;
+            table.getItems().setAll(reread.modules().stream().map(Row::new).toList());
+            Io.async(() -> Links.of(reread.modules()))
+                    .thenAccept(links -> Platform.runLater(() -> board.setLinks(links)));
+            armed = Optional.empty();
+            previewed = Optional.empty();
+            specChanged();
+        }));
     }
 
     public boolean running() {
@@ -214,6 +268,15 @@ public final class ReleaseTab extends BorderPane {
 
     /** Asks the run to stop after the step it is on. */
     public void stop() {
+        if (previewing) {
+            // A preview tags nothing: dropped at once, its answer ignored when it comes.
+            previewRun++;
+            previewing = false;
+            droppedRunning = true;
+            status.setText("Preview dropped; its current gate ends in the background first.");
+            buttons();
+            return;
+        }
         if (!running()) {
             return;
         }
@@ -300,9 +363,9 @@ public final class ReleaseTab extends BorderPane {
     private void buttons() {
         boolean busy = running();
         ReleaseSpec spec = spec();
-        preview.setDisable(busy || previewing || spec.empty());
-        execute.setDisable(busy || previewing || armed.isEmpty() || !armed.get().equals(spec));
-        stop.setDisable(!busy || stopAsked.get());
+        preview.setDisable(busy || previewing || droppedRunning || spec.empty());
+        execute.setDisable(busy || previewing || droppedRunning || armed.isEmpty() || !armed.get().equals(spec));
+        stop.setDisable(!(busy || previewing) || stopAsked.get());
         resume.setDisable(busy || previewing || resumable.isEmpty());
         all.setDisable(busy);
         table.setEditable(!busy);
@@ -320,13 +383,23 @@ public final class ReleaseTab extends BorderPane {
         armed = Optional.empty();
         previewed = Optional.empty();
         previewing = true;
+        long run = ++previewRun;
         banner.hide();
         verdicts.getChildren().clear();
         status.setText("Deciding and running the gates…");
         buttons();
         Io.async(() -> backend.preview(umbrella.root(), spec)).whenComplete((result, error) -> Platform.runLater(() -> {
+            if (run != previewRun) {
+                droppedRunning = false;
+                status.setText("The dropped preview ended.");
+                buttons();
+                return;
+            }
             previewing = false;
-            if (error != null) {
+            if (!spec.equals(spec())) {
+                // The rows or flags changed while it ran: its plan is of a request no longer on screen.
+                status.setText("The flags changed while it ran: preview again.");
+            } else if (error != null) {
                 status.setText("");
                 banner.show("The preview could not run", List.of(Io.message(error)));
                 previewed = Optional.empty();
@@ -349,18 +422,32 @@ public final class ReleaseTab extends BorderPane {
             status.setText("Nothing to release.");
         } else if (result.refused()) {
             banner.show("A gate refused", result.verdicts().stream().filter(GateVerdict::stops)
-                    .map(v -> v.gate() + ": " + v.line() + (v.refusal().isBlank() ? "" : "\n" + v.refusal()))
+                    .map(v -> String.join("\n", Stream.concat(Stream.of(v.gate() + ": " + v.line()),
+                            v.repair().stream()).toList()))
                     .toList());
             status.setText("Refused: nothing would be tagged.");
         } else if (spec.equals(spec())) {
             armed = Optional.of(spec);
-            status.setText(tags.size() + " tag" + (tags.size() == 1 ? "" : "s") + " would be cut.");
+            List<String> added = added(result);
+            status.setText(tags.size() + " tag" + (tags.size() == 1 ? "" : "s") + " would be cut."
+                    + (added.isEmpty() ? "" : " Added because a release owes them: " + String.join(", ", added)
+                    + " (pick --no-dependents to leave them out)."));
         }
     }
 
     private static String cutText(Decision decision) {
-        return decision.release().map(version -> decision.base() + " → " + version)
+        // An owed dependent the run adds says so, so the operator sees it was not asked for.
+        String added = decision.reason().startsWith(Decider.ADDED) ? "  (" + decision.reason() + ")" : "";
+        return decision.release().map(version -> decision.base() + " → " + version + added)
                 .orElse("left (" + decision.reason() + ")");
+    }
+
+    /** The modules the plan adds because a release owes them, by name. */
+    private static List<String> added(Release.Preview result) {
+        return result.plan().releasing().keySet().stream()
+                .filter(module -> result.plan().decision(module)
+                        .filter(d -> d.reason().startsWith(Decider.ADDED)).isPresent())
+                .map(Module::name).toList();
     }
 
     private void verdict(GateVerdict verdict) {
@@ -382,7 +469,7 @@ public final class ReleaseTab extends BorderPane {
         }
         List<String> tags = ReleaseConfirm.tags(previewed.get().plan(), umbrella.config().tagPattern());
         if (!ReleaseConfirm.ask(getScene() == null ? null : getScene().getWindow(), spec.executeCommandLine(), tags,
-                WARNING)) {
+                ReleaseConfirm.forced(previewed.get().verdicts()), WARNING)) {
             return;
         }
         start(spec, (stopFlag, events) -> backend.run(umbrella.root(), spec, stopFlag, events));
@@ -396,11 +483,13 @@ public final class ReleaseTab extends BorderPane {
         List<String> left = resumable.get().modules().stream()
                 .filter(entry -> entry.stage() != Stage.SNAPSHOT)
                 .map(entry -> "    " + entry.module() + "  " + entry.version().tag(umbrella.config().tagPattern())
-                        + "  (" + entry.stage().name().toLowerCase().replace('_', ' ') + ")")
+                        + "  (" + entry.stage().name().toLowerCase().replace('_', ' ') + ")"
+                        + (entry.detail().isBlank() ? "" : ": " + entry.detail()))
                 .toList();
         if (!ReleaseConfirm.ask(getScene() == null ? null : getScene().getWindow(), spec.resumeCommandLine(),
-                left, "Goes on with the newest run that did not finish, each module from the stage it reached. "
-                        + WARNING)) {
+                left, "Goes on with the newest run that did not finish, each module from the stage it reached; "
+                        + "the stage says where it stopped, and why when the run said. The request rows and "
+                        + "--all are ignored: a resumed run releases what it decided. " + WARNING)) {
             return;
         }
         start(spec, (stopFlag, events) -> backend.resume(umbrella.root(), spec, stopFlag, events));
@@ -425,9 +514,18 @@ public final class ReleaseTab extends BorderPane {
         ticker.play();
         redraw();
         buttons();
+        // A build streams hundreds of lines a second: they queue here and the FX thread takes them in one go.
+        Queue<Event> pending = new ConcurrentLinkedQueue<>();
+        AtomicBoolean drawing = new AtomicBoolean();
         Io.async(() -> runs.run(stopAsked::get, event -> {
             started.accept(event, Instant.now());
-            Platform.runLater(() -> shown(event));
+            pending.add(event);
+            if (drawing.compareAndSet(false, true)) {
+                Platform.runLater(() -> {
+                    drawing.set(false);
+                    shown(pending);
+                });
+            }
         })).whenComplete((outcome, error) -> {
             if (error != null) {
                 started.threw(Io.message(error), Instant.now());
@@ -438,12 +536,29 @@ public final class ReleaseTab extends BorderPane {
         });
     }
 
-    private void shown(Event event) {
-        ConsoleText.event(event).forEach(line -> output.appendText(line + "\n"));
-        if (event instanceof Event.Verdict v) {
-            verdict(v.verdict());
+    private void shown(Queue<Event> pending) {
+        StringBuilder lines = new StringBuilder();
+        for (Event event; (event = pending.poll()) != null; ) {
+            ConsoleText.event(event).forEach(line -> lines.append(line).append('\n'));
+            if (event instanceof Event.Verdict v) {
+                verdict(v.verdict());
+            }
         }
+        append(lines.toString());
         redraw();
+    }
+
+    /** The output keeps its last {@value #OUTPUT_CAP} characters: the whole run is in its log file. */
+    private void append(String text) {
+        if (text.isEmpty()) {
+            return;
+        }
+        output.appendText(text);
+        int over = output.getLength() - OUTPUT_CAP;
+        if (over > 0) {
+            int cut = output.getText().indexOf('\n', over);
+            output.deleteText(0, cut < 0 ? over : cut + 1);
+        }
     }
 
     private void ended(Release.Outcome outcome, Throwable error) {
@@ -480,6 +595,9 @@ public final class ReleaseTab extends BorderPane {
     private void refreshResumable() {
         Io.async(() -> backend.resumable(umbrella.root())).whenComplete((state, error) -> Platform.runLater(() -> {
             resumable = error == null ? state : Optional.empty();
+            if (error != null) {
+                status.setText("Could not read the last run's state: " + Io.message(error));
+            }
             resume.setText(resumable.map(s -> "Resume… (" + s.modules().stream()
                     .filter(e -> e.stage() != Stage.SNAPSHOT).count() + " left)")
                     .orElse("Resume…"));

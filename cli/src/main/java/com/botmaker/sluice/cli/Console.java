@@ -60,9 +60,7 @@ final class Console implements Consumer<Event> {
 
     private void verdict(GateVerdict verdict) {
         out.println("[" + verdict.status() + "] " + verdict.gate() + ": " + verdict.line());
-        if (verdict.status() == GateVerdict.Status.REFUSED && !verdict.refusal().isBlank()) {
-            verdict.refusal().lines().forEach(line -> out.println("    " + line));
-        }
+        verdict.repair().forEach(line -> out.println("    " + line));
     }
 
     /** The run's last lines: how it ended and where its files are. */

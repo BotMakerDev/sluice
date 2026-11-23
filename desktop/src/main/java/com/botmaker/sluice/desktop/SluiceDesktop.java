@@ -145,10 +145,15 @@ public final class SluiceDesktop extends Application {
         Consumer<String> browse = url -> Browse.open(url, message::setText);
         ModulesTab modules = new ModulesTab(umbrella, browse);
         release = new ReleaseTab(umbrella, browse);
+        modules.setBlocked(release::running);
         LazyTab<ReleasesTab> releases = new LazyTab<>("Releases", () -> new ReleasesTab(umbrella, browse));
         LazyTab<ChangelogTab> changelog = new LazyTab<>("Changelog", () -> new ChangelogTab(umbrella));
         config = new LazyTab<>("Config", () -> new ConfigTab(umbrella));
         release.setOnEnded(() -> {
+            // A run moves versions, pins and changelogs: every tab that shows them reads the umbrella again.
+            modules.refresh();
+            release.reopen();
+            changelog.ifBuilt(ChangelogTab::reload);
             releases.ifBuilt(ReleasesTab::reload);
             if (closeWhenEnded) {
                 stage.close();

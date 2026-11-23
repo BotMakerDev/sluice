@@ -48,7 +48,8 @@ public final class ReleasesTab extends BorderPane {
     public ReleasesTab(Umbrella umbrella, Consumer<String> open) {
         this.umbrella = umbrella;
         this.board = new ReleaseBoard(open);
-        board.setLinks(name -> umbrella.module(name).flatMap(Links::of));
+        Io.async(() -> Links.of(umbrella.modules()))
+                .thenAccept(links -> Platform.runLater(() -> board.setLinks(links)));
         board.setAnimated(false);
         getStyleClass().add("releases-tab");
 
@@ -134,15 +135,34 @@ public final class ReleasesTab extends BorderPane {
             log.clear();
             return;
         }
-        board.show(progress(release));
-        board.setVisible(true);
-        board.setManaged(true);
-        log.setText(release.log().map(file -> {
+        // Its state and log are files: read off the FX thread, shown only if it is still the one selected.
+        Io.async(() -> new Shown(progress(release), logOf(release))).whenComplete((shown, error) ->
+                Platform.runLater(() -> {
+                    if (list.getSelectionModel().getSelectedItem() != release) {
+                        return;
+                    }
+                    if (error != null) {
+                        log.setText("This run could not be read: " + Io.message(error));
+                        return;
+                    }
+                    board.show(shown.progress());
+                    board.setVisible(true);
+                    board.setManaged(true);
+                    log.setText(shown.log());
+                }));
+    }
+
+    /** A past run as read. */
+    private record Shown(ReleaseProgress progress, String log) {
+    }
+
+    private static String logOf(LoggedRelease release) {
+        return release.log().map(file -> {
             try {
                 return Files.readString(file);
             } catch (IOException e) {
                 return file + ": could not be read (" + e.getMessage() + ")";
             }
-        }).orElse("This run left no log."));
+        }).orElse("This run left no log.");
     }
 }

@@ -15,7 +15,9 @@ import javafx.scene.layout.VBox;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -58,9 +60,10 @@ public final class ReleaseBoard extends VBox {
         getChildren().addAll(headline, tiles, timeline, empty, scroll);
     }
 
-    /** Where each module's pages are, by its name. */
-    public void setLinks(Function<String, Optional<Links>> links) {
-        this.links = links;
+    /** Where each module's pages are, by its name, read off the FX thread; the lanes show them at once. */
+    public void setLinks(Map<String, Optional<Links>> links) {
+        this.links = module -> links.getOrDefault(module, Optional.empty());
+        redrawLanes();
     }
 
     public void show(ReleaseProgress progress) {
@@ -102,8 +105,8 @@ public final class ReleaseBoard extends VBox {
             return;
         }
         Filter filter = tiles.selected();
-        laneBox.getChildren().clear();
         lanes.keySet().retainAll(progress.lanes().stream().map(Lane::module).toList());
+        List<ModuleLane> views = new ArrayList<>();
         for (Lane lane : progress.lanes()) {
             ModuleLane view = lanes.computeIfAbsent(lane.module(), module -> {
                 ModuleLane created = new ModuleLane(open);
@@ -114,7 +117,11 @@ public final class ReleaseBoard extends VBox {
             boolean shown = lane.shownUnder(filter);
             view.setVisible(shown);
             view.setManaged(shown);
-            laneBox.getChildren().add(view);
+            views.add(view);
+        }
+        // Laid out again only when a lane comes, goes or moves, not on every tick.
+        if (!laneBox.getChildren().equals(views)) {
+            laneBox.getChildren().setAll(views);
         }
     }
 }

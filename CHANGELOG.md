@@ -19,16 +19,51 @@ All notable changes to this project are documented here, in the format of
 
 ### Added
 
+- sluice-desktop's Release tab says what it adds: a module released because a release owes it shows
+  `(added, …)` in *Would cut*, and the status names them with the way to leave them out (`--no-dependents`).
+  Execute's dialog lists each refusal `--force` passes over; Resume's names each module's stage and why it
+  stopped, and says the request rows are ignored. A row's request is picked from patch, minor and major, or typed;
+  the flags wrap, the columns fit the window, and the verdicts scroll.
 - **The `ci` gate checks CI on what it releases.** A module ahead of its origin is pushed first (a preview says it
   would), then the gate waits, up to `sluice.yml`'s new `ci-wait` (minutes, default 20, `0` not at all), for a
   finished run of each workflow on its `HEAD`: green passes, red refuses, none by then stays `SKIPPED`. A module
   without a workflow of its own is not waited on.
+- **A red run that failed in an upstream is rerun.** When an upstream's CI went green after a module's red run (its
+  build reads the upstream's branch), the `ci` gate reruns the run's failed jobs through GitHub's API and waits for
+  them like a push; green passes. A preview says it would; a rerun GitHub refuses keeps the refusal, saying why.
+- **A run repairs a module behind its origin or with stale pins before it gates.** A module it releases that is
+  on its branch with no tracked change is fast-forwarded to its origin, and a pin behind its upstream's `main` is
+  moved and committed, as `--sync-pins --execute` does, and pushed by the `ci` gate. The run then decides again,
+  and refuses (preview again) when that changes what it would cut. A preview says it would (`clean` and
+  `pins-at-main` `SKIPPED`); a diverged or changed tree, or a module the run does not release, is still refused.
+- **A module whose upstream the run releases is built at its pins just before its release commit**, once that
+  upstream is published, where `builds-at-pins` could only skip it (not under `--no-wait`, nor against an
+  upstream the run does not wait on, which may not be served yet). A build that fails stops the run before the
+  module's release commit, with the build's errors; `--resume` builds it again, against the upstreams the stopped
+  run had already finished.
+- **A module its target has not served in time holds back only its dependents** and what `sluice.yml` places after
+  it (or last). The other modules are released on; the run ends `STOPPED` and `--resume` waits on it again, then releases what waited.
+- A run's state records each `after-tag` step done, so `--resume` after a failed step runs none of the steps before
+  it again.
 
 ### Fixed
 
 - The JitPack target's prerequisite check no longer skips a plugin whose `<prerequisites><maven>` is a property its
   parent pom sets (`maven-surefire-plugin:3.2.5`'s `${mavenVersion}`): the property is read through its `<parent>`
   poms, fetched as its own pom is.
+- A refused gate's line is printed once: the command and sluice-desktop's console showed it, then the refusal that
+  begins with it (`GateVerdict.repair()` is what follows the line). The `owed` refusal (under `owed: refuse`) is one
+  line naming each owed module and the whole command that releases them too, by each module's alias
+  (`sluice --core 1.2.0 --studio patch`), or `--no-dependents`.
+- sluice-desktop reads git and files off the FX thread: each module's GitHub links and pins (Modules), the links of
+  the Release and Releases boards, and a past run's state and log (Releases). The window no longer stalls on a big
+  umbrella, and its background work runs on at most eight threads at once.
+- After a run, sluice-desktop reads the umbrella again: the Modules tab refreshes, the Release tab's rows start over
+  at the new versions (any preview dropped), and an opened Changelog tab reloads. Refresh waits while a run goes.
+- sluice-desktop's Stop drops a preview still running (Preview waits until its gate ends), and a preview whose
+  flags or rows changed while it ran arms nothing. Resume is checked again each time the Release tab is shown, and a state it cannot read is said.
+- sluice-desktop takes a run's events in one go per frame, keeps the last 400 000 characters of its output (the
+  log keeps all), and redraws a lane only when its stage, steps or errors change.
 
 ## [0.4.1] — 2026-11-22
 

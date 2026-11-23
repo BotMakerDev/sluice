@@ -35,6 +35,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -67,7 +68,8 @@ public final class ModulesTab extends BorderPane {
 
     static final class Row {
         final Module module;
-        final Optional<Links> links;
+        /** Read off the FX thread with the other cells: none until then. */
+        Optional<Links> links = Optional.empty();
         final StringProperty onMain = new SimpleStringProperty("");
         Cell tag = Cell.ASKING;
         Cell ci = Cell.ASKING;
@@ -76,12 +78,12 @@ public final class ModulesTab extends BorderPane {
 
         Row(Module module) {
             this.module = module;
-            this.links = Links.of(module);
             onMain.set(module.version().orElse("—"));
         }
     }
 
     private Umbrella umbrella;
+    private BooleanSupplier blocked = () -> false;
     private final Consumer<String> open;
     private final TableView<Row> table = new TableView<>();
     private final Label status = new Label();
@@ -123,6 +125,11 @@ public final class ModulesTab extends BorderPane {
 
     /** Reads the umbrella again, its versions and pins as they are now, then asks every cell again. */
     public void refresh() {
+        if (blocked.getAsBoolean()) {
+            // The run moves what this reads; its end refreshes the tab.
+            status.setText("A release is running: the modules are read again when it ends.");
+            return;
+        }
         refresh.setDisable(true);
         status.setText("Reading the umbrella…");
         Path root = umbrella.root();
@@ -144,12 +151,15 @@ public final class ModulesTab extends BorderPane {
         Io.async(GitHub::fromEnvironment).whenComplete((github, error) -> {
             Optional<GitHub> gh = error == null ? github : Optional.empty();
             List<Row> rows = List.copyOf(table.getItems());
-            Platform.runLater(() -> rows.forEach(row -> {
-                row.tag = row.ci = row.build = Cell.ASKING;
-                row.pins = pins(row.module);
-            }));
+            Platform.runLater(() -> rows.forEach(row -> row.tag = row.ci = row.build = row.pins = Cell.ASKING));
             Platform.runLater(table::refresh);
             List<CompletableFuture<Void>> asked = rows.stream().map(row -> Io.run(() -> {
+                Optional<Links> links = Links.of(row.module);
+                Cell pins = pins(row.module);
+                post(() -> {
+                    row.links = links;
+                    row.pins = pins;
+                });
                 Cell ci = ci(row.module, gh);
                 post(() -> row.ci = ci);
                 Optional<Version> tag = ModuleStatus.latestTag(row.module, umbrella.config());
@@ -173,6 +183,9 @@ public final class ModulesTab extends BorderPane {
                     if (row.build == Cell.ASKING) {
                         row.build = broken;
                     }
+                    if (row.pins == Cell.ASKING) {
+                        row.pins = broken;
+                    }
                 });
                 return null;
             })).toList();
@@ -183,6 +196,11 @@ public final class ModulesTab extends BorderPane {
                                 : "");
                     }));
         });
+    }
+
+    /** While this says so, Refresh reads nothing: a release is moving what it would read. */
+    public void setBlocked(BooleanSupplier blocked) {
+        this.blocked = blocked;
     }
 
     Row row(String module) {

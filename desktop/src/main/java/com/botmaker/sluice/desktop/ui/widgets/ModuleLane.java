@@ -124,14 +124,21 @@ public final class ModuleLane extends VBox {
     }
 
     public void show(Lane lane, Optional<Links> links) {
+        elapsed.setText(lane.elapsed().map(ReleaseProgress::clock).orElse(""));
+        // Redrawn each tick: only the clock moves unless its stage, steps, errors or links did.
+        boolean same = this.lane != null && links.equals(this.links) && this.lane.tag().equals(lane.tag())
+                && this.lane.stage() == lane.stage() && this.lane.steps().equals(lane.steps())
+                && this.lane.errors().equals(lane.errors());
         this.lane = lane;
+        if (same) {
+            return;
+        }
         this.links = links;
         module.setText(lane.module());
         chip.setText(lane.tag());
         chip.setDisable(links.isEmpty() || !lane.tagged());
         showChip(treeChip, links.isPresent() && lane.tagged());
         stage.setText(lane.stageLabel());
-        elapsed.setText(lane.elapsed().map(ReleaseProgress::clock).orElse(""));
 
         for (Step step : Step.values()) {
             NodeState state = lane.state(step);
