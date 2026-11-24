@@ -276,10 +276,17 @@ public final class SelfUpdate {
         return switch (format) {
             case RPM -> List.of(List.of("dnf", "upgrade", "-y", "--refresh", "sluice"));
             case DEB -> List.of(
-                    List.of("apt-get", "update", "-o", "Dir::Etc::sourcelist=" + format.repository(),
+                    List.of("apt-get", "update", "-o", "Dir::Etc::sourcelist=" + linuxPath(format.repository()),
                             "-o", "Dir::Etc::sourceparts=-", "-o", "APT::Get::List-Cleanup=0"),
                     List.of("apt-get", "install", "--only-upgrade", "-y", "sluice"));
         };
+    }
+
+    /** {@code path} as apt reads it, with {@code /} whatever this JVM's separator (a test runs on Windows too). */
+    private static String linuxPath(Path path) {
+        StringBuilder out = new StringBuilder();
+        for (Path name : path) out.append('/').append(name);
+        return out.toString();
     }
 
     /** Downloads {@code asset} to {@code to} and checks it, deleting it when it fails the check. */
