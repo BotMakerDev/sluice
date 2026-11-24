@@ -10,7 +10,7 @@
          com.github.BotMakerDev.sluice:<artifactId>:<tag>. -->
     <groupId>com.github.BotMakerDev</groupId>
     <artifactId>sluice</artifactId>
-    <version>0.4.3-SNAPSHOT</version>
+    <version>0.5.0</version>
     <packaging>pom</packaging>
 
     <name>sluice</name>
