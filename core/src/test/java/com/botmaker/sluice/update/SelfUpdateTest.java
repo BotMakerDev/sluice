@@ -17,6 +17,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -466,9 +467,13 @@ class SelfUpdateTest {
         @Override
         public int run(List<String> argv) throws IOException {
             ran.add(argv);
-            if (Files.isRegularFile(Path.of(argv.getLast()))) {
-                seen.add(Files.readString(Path.of(argv.getLast())));
+            Path last;
+            try {
+                last = Path.of(argv.getLast());
+            } catch (InvalidPathException notAPath) { // Windows: `APT::Get::List-Cleanup=0`
+                return exit;
             }
+            if (Files.isRegularFile(last)) seen.add(Files.readString(last));
             return exit;
         }
 
