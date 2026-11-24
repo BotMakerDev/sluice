@@ -50,6 +50,11 @@ contents:
     file_info:
       mode: 0755
 
+  # Tab completion, written by `sluice completion` in build-packages.sh, never committed. bash-completion loads it
+  # by the command's name, so the file is `sluice`; zsh reads it through bashcompinit.
+  - src: target/sluice.bash
+    dst: /usr/share/bash-completion/completions/sluice
+
   # The menu entry and its icon, under the name the entry's Icon= gives.
   - src: packaging/linux/sluice-desktop.desktop
     dst: /usr/share/applications/sluice-desktop.desktop

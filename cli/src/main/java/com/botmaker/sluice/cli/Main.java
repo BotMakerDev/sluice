@@ -34,7 +34,8 @@ import java.util.stream.Stream;
  */
 @Command(name = "sluice", mixinStandardHelpOptions = true, versionProvider = Main.ManifestVersion.class,
         subcommands = {Commands.Preview.class, Commands.Cut.class, Commands.Why.class, Commands.Resume.class,
-            Commands.Status.class, Commands.SyncPins.class, GraphCommand.class, UpdateCommand.class},
+            Commands.Status.class, Commands.SyncPins.class, GraphCommand.class, UpdateCommand.class,
+            CompletionCommand.class},
         description = "Release a Maven project split over the git submodules of one umbrella: each module tagged in "
                 + "dependency order, its dependents' pins moved, every module back on its next snapshot.",
         exitCodeListHeading = "%nExit codes:%n",

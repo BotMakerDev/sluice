@@ -15,6 +15,7 @@ sluice status [FILE]            # a run's state, module by module
 sluice sync-pins [--dry-run]    # move every pin to its upstream's version on the branch
 sluice graph                    # the modules, their pins and the tag order
 sluice update [--check]         # this sluice to its latest release, the way it was installed
+sluice completion               # the bash completion script; the rpm and the deb install it
 ```
 
 A module's alias in `sluice.yml` is a flag too: `--sdk 1.10.0` is `--module sdk=1.10.0`. Every verb takes

@@ -194,4 +194,19 @@ class CommandLineTest {
         assertTrue(out.contains("a -> b") && out.contains("property a.version in b/pom.xml"), out);
         assertEquals(out, sluice(new LocalEngine(), umbrella, "graph").out(), "--umbrella before graph");
     }
+
+    @Test
+    void completionOffersEveryVerbAndItsOptions() {
+        Ran completion = sluice(new LocalEngine(), "completion");
+
+        assertEquals(Main.OK, completion.code(), completion.toString());
+        String script = completion.out();
+        assertTrue(script.contains("complete -F _complete_sluice") && script.contains("sluice"), script);
+        for (String verb : List.of("preview", "release", "why", "resume", "status", "sync-pins", "graph", "update",
+                "completion")) {
+            assertTrue(script.contains(verb), verb + " offered");
+        }
+        assertTrue(script.contains("--check") && script.contains("--umbrella"), "options offered");
+        assertEquals("", completion.err());
+    }
 }
