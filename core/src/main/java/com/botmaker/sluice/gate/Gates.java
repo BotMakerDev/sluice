@@ -6,6 +6,7 @@ package com.botmaker.sluice.gate;
 import com.botmaker.sluice.Refusal;
 import com.botmaker.sluice.config.Config;
 import com.botmaker.sluice.github.GitHub;
+import com.botmaker.sluice.github.GitHub.Repo;
 import com.botmaker.sluice.model.Module;
 import com.botmaker.sluice.spi.Gate;
 import com.botmaker.sluice.spi.GateContext;
@@ -35,8 +36,14 @@ public final class Gates {
      */
     public static List<Gate> standard(Config config, Function<Module, PublishTarget> targets,
                                       Optional<GitHub> github) {
+        return standard(config, targets, github, module -> Repo.ofCheckout(module.dir().dir()));
+    }
+
+    /** The same, each module's GitHub repository {@code repos}'s. */
+    public static List<Gate> standard(Config config, Function<Module, PublishTarget> targets,
+                                      Optional<GitHub> github, Function<Module, Optional<Repo>> repos) {
         List<Gate> gates = new ArrayList<>(List.of(new CleanGate(), new OwedGate(), new PinsAtMainGate(),
-                new TextPinGate(), new ChangelogGate(), new CiGate(github), new PinsResolveGate(targets),
+                new TextPinGate(), new ChangelogGate(), new CiGate(github, repos), new PinsResolveGate(targets),
                 new TargetGate(targets)));
         config.gates().forEach(command -> gates.add(new CommandGate(command)));
         gates.add(new BuildsAtPinsGate(targets, List.of(), Optional.of(BuildsAtPinsGate.lastingRepository())));

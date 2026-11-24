@@ -7,6 +7,7 @@ import com.botmaker.sluice.Refusal;
 import com.botmaker.sluice.execute.Release.Status;
 import com.botmaker.sluice.execute.ReleaseFixture.Assets;
 import com.botmaker.sluice.testing.FixtureUmbrella;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -66,6 +67,7 @@ class AssetPinsTest {
     }
 
     @Test
+    @Tag("slow")
     void aRepositoryBehindItsOriginKeepsItsPin() {
         FixtureUmbrella umbrella = umbrella();
         Path other = tmp.resolve("other");
@@ -85,6 +87,7 @@ class AssetPinsTest {
     }
 
     @Test
+    @Tag("slow")
     void aReleasedAssetIsPinnedCommittedAndPushed() throws IOException {
         FixtureUmbrella umbrella = umbrella();
         List<String> lines = lines();
@@ -104,6 +107,7 @@ class AssetPinsTest {
     }
 
     @Test
+    @Tag("slow")
     void anAssetThatNeverCameLeavesThePinAndTheReleaseDone() {
         FixtureUmbrella umbrella = umbrella();
         List<String> lines = lines();

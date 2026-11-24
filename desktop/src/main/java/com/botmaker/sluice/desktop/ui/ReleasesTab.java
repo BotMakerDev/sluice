@@ -10,6 +10,7 @@ import com.botmaker.sluice.desktop.model.Umbrella;
 import com.botmaker.sluice.desktop.ui.widgets.ReleaseBoard;
 import com.botmaker.sluice.execute.ReleaseLogs;
 import com.botmaker.sluice.execute.ReleaseLogs.LoggedRelease;
+import com.botmaker.sluice.execute.ReleaseState;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -44,8 +45,10 @@ public final class ReleasesTab extends BorderPane {
     private final TextArea log = new TextArea();
     private final Label status = new Label();
     private final Button reload = new Button("Reload");
+    private final Button resume = new Button("Resume…");
 
-    public ReleasesTab(Umbrella umbrella, Consumer<String> open) {
+    /** {@code resume} goes on with the newest run that did not finish, through the Release tab. */
+    public ReleasesTab(Umbrella umbrella, Consumer<String> open, Runnable resume) {
         this.umbrella = umbrella;
         this.board = new ReleaseBoard(open);
         Io.async(() -> Links.of(umbrella.modules()))
@@ -71,7 +74,10 @@ public final class ReleasesTab extends BorderPane {
                         + item.unreadable().map(why -> "  ·  " + why).orElse(""));
             }
         });
-        list.getSelectionModel().selectedItemProperty().addListener((o, was, is) -> show(is));
+        list.getSelectionModel().selectedItemProperty().addListener((o, was, is) -> {
+            this.resume.setDisable(!resumable(is));
+            show(is);
+        });
         list.setPrefWidth(320);
 
         log.setEditable(false);
@@ -83,10 +89,12 @@ public final class ReleasesTab extends BorderPane {
         board.setManaged(false);
 
         reload.setOnAction(e -> reload());
+        this.resume.setDisable(true);
+        this.resume.setOnAction(e -> resume.run());
         status.getStyleClass().add("status-line");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox bar = new HBox(8, reload, spacer, status);
+        HBox bar = new HBox(8, reload, this.resume, spacer, status);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(8, 10, 8, 10));
 
@@ -122,6 +130,21 @@ public final class ReleasesTab extends BorderPane {
 
     String logText() {
         return log.getText();
+    }
+
+    /** Only the newest run resumes, and only one that did not finish and no sluice runs now. */
+    private boolean resumable(LoggedRelease release) {
+        return release != null && !list.getItems().isEmpty() && list.getItems().getFirst() == release
+                && !release.live()
+                && release.state().filter(state -> state.status() != ReleaseState.Status.DONE).isPresent();
+    }
+
+    Button resumeButton() {
+        return resume;
+    }
+
+    ListView<LoggedRelease> list() {
+        return list;
     }
 
     private ReleaseProgress progress(LoggedRelease release) {

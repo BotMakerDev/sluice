@@ -481,8 +481,16 @@ public final class ReleaseTab extends BorderPane {
         start(spec, (stopFlag, events) -> backend.run(umbrella.root(), spec, stopFlag, events));
     }
 
+    /**
+     * Reads the newest run again, then asks to go on with it as Resume… does: a run in a terminal may have stopped
+     * since this tab last read it. Nothing while Resume… is greyed.
+     */
+    public void resumeNewest() {
+        refreshResumable(this::resume);
+    }
+
     private void resume() {
-        if (resumable.isEmpty()) {
+        if (resume.isDisabled() || resumable.isEmpty()) {
             return;
         }
         ReleaseSpec spec = spec();
@@ -603,6 +611,11 @@ public final class ReleaseTab extends BorderPane {
     }
 
     private void refreshResumable() {
+        refreshResumable(() -> {
+        });
+    }
+
+    private void refreshResumable(Runnable then) {
         Io.async(() -> backend.resumable(umbrella.root())).whenComplete((state, error) -> Platform.runLater(() -> {
             resumable = error == null ? state : Optional.empty();
             if (error != null) {
@@ -612,6 +625,7 @@ public final class ReleaseTab extends BorderPane {
                     .filter(e -> e.stage() != Stage.SNAPSHOT).count() + " left)")
                     .orElse("Resume…"));
             buttons();
+            then.run();
         }));
     }
 }

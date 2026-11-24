@@ -9,6 +9,7 @@ import com.botmaker.sluice.execute.Release.Status;
 import com.botmaker.sluice.execute.ReleaseLogs.LoggedRelease;
 import com.botmaker.sluice.execute.ReleaseState.Entry;
 import com.botmaker.sluice.testing.FixtureUmbrella;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -77,6 +78,7 @@ class ReleaseLogsTest {
     }
 
     @Test
+    @Tag("slow")
     void readsARunByEitherFile() {
         FixtureUmbrella umbrella = pinned(tmp);
         Release.Outcome outcome = run(umbrella, EXECUTE, served(), lines(), "a", "b");

@@ -12,6 +12,7 @@ import com.botmaker.sluice.spi.GateContext;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 
 /**
@@ -23,6 +24,17 @@ public final class CleanGate implements Gate {
     /** How many uncommitted files a refusal lists. */
     private static final int LISTED = 5;
 
+    private final Set<String> touched;
+
+    public CleanGate() {
+        this(Set.of());
+    }
+
+    /** @param touched the modules a resumed run stopped in, by name: they may hold half a step, so go unchecked */
+    public CleanGate(Set<String> touched) {
+        this.touched = Set.copyOf(touched);
+    }
+
     @Override
     public String name() {
         return "clean";
@@ -33,6 +45,9 @@ public final class CleanGate implements Gate {
         String branch = ctx.config().branch();
         List<GateVerdict> verdicts = new ArrayList<>();
         for (Module module : ctx.plan().releasing().keySet()) {
+            if (touched.contains(module.name())) {
+                continue;
+            }
             Path dir = module.dir().dir();
             Optional<String> on = Git.branch(dir);
             if (!on.equals(Optional.of(branch))) {

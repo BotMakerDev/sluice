@@ -170,7 +170,12 @@ public final class SluiceDesktop extends Application {
         release = new ReleaseTab(umbrella, browse);
         modules.setBlocked(release::running);
         release.setBlocked(() -> updating);
-        LazyTab<ReleasesTab> releases = new LazyTab<>("Releases", () -> new ReleasesTab(umbrella, browse));
+        TabPane tabs = new TabPane();
+        Tab releaseTab = new Tab("Release", release);
+        LazyTab<ReleasesTab> releases = new LazyTab<>("Releases", () -> new ReleasesTab(umbrella, browse, () -> {
+            tabs.getSelectionModel().select(releaseTab);
+            release.resumeNewest();
+        }));
         LazyTab<ChangelogTab> changelog = new LazyTab<>("Changelog", () -> new ChangelogTab(umbrella));
         config = new LazyTab<>("Config", () -> new ConfigTab(umbrella));
         release.setOnEnded(() -> {
@@ -185,10 +190,9 @@ public final class SluiceDesktop extends Application {
         });
 
         Tab modulesTab = new Tab("Modules", modules);
-        Tab releaseTab = new Tab("Release", release);
         releaseTab.setGraphic(release.badge());
         releaseTab.selectedProperty().addListener((o, was, is) -> release.setShowing(is));
-        TabPane tabs = new TabPane(modulesTab, releaseTab, releases.tab(), changelog.tab(), config.tab());
+        tabs.getTabs().setAll(modulesTab, releaseTab, releases.tab(), changelog.tab(), config.tab());
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         tabs.getStyleClass().add("tab-bar");
         release.setShowing(false);

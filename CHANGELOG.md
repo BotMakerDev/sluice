@@ -3,6 +3,25 @@
 All notable changes to this project are documented here, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **CI is waited on just before a module's release commit**, not before the first tag: a module whose CI on `HEAD`
+  still runs holds back only the modules that need it, and the run releases the others meanwhile, asking GitHub
+  every 30 s, each module up to `ci-wait` from its first ask. A red verdict stops the run there; a stop while it
+  waits leaves the run to `resume`, which judges CI again for every module not yet release-committed.
+- **The build at new pins compiles the tests too** (`mvn test-compile`): JitPack's `install -DskipTests` compiles
+  them, so a test that needs an unreleased upstream change now stops the run before its release commit, not on
+  JitPack after the tag.
+- **Slow tests are tagged `slow`** and left out of a plain `mvn test` and of CI on Windows; CI on Ubuntu runs them
+  (`-Dsluice.excludedTags=`).
+
+### Added
+
+- **sluice-desktop's Releases tab has Resume…** for the newest run that did not finish; it goes on through the
+  Release tab, as its own Resume… does.
+
 ## [0.5.1] — 2026-11-24
 
 ### Added

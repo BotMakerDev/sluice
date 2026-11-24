@@ -29,8 +29,10 @@ jobs:
       - name: Fetch versions-maven-plugin
         shell: bash  # PowerShell would split -Dartifact=org.codehaus… at its first dot
         run: mvn -B -q dependency:get -Dartifact=org.codehaus.mojo:versions-maven-plugin:2.18.0
+      # Ubuntu runs the tests tagged slow too (whole release runs, minutes on Windows); Windows leaves them out.
       - name: Test
-        run: mvn -B verify
+        shell: bash
+        run: mvn -B verify ${{ matrix.os == 'ubuntu-latest' && '-Dsluice.excludedTags=' || '' }}
 
   # On a tag: the command's and the window's jars, and sluice's rpm and deb, each carrying both on one runtime cut by
   # jlink (packaging/linux/build-packages.sh).

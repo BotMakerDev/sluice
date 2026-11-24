@@ -10,6 +10,8 @@ import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.execute.Release.Options;
 import com.botmaker.sluice.execute.Release.Outcome;
 import com.botmaker.sluice.execute.Release.Wiring;
+import com.botmaker.sluice.github.GitHub;
+import com.botmaker.sluice.github.GitHub.Repo;
 import com.botmaker.sluice.model.Coordinate;
 import com.botmaker.sluice.spi.PublishTarget;
 import com.botmaker.sluice.testing.FixtureUmbrella;
@@ -61,7 +63,14 @@ final class ReleaseFixture {
     /** The same, each build at the pins {@code atPins}'s. */
     static Wiring wiring(PublishTarget target, AssetPins.Fetch assets, Release.AtPins atPins) {
         return new Wiring(config -> module -> target, Optional::empty, stop -> duration -> true, ReleaseFixture::plain,
-                CLOCK, assets, targets -> atPins);
+                CLOCK, assets, targets -> atPins, module -> Optional.empty());
+    }
+
+    /** {@code wiring}, GitHub {@code github}, each module's repository {@code owner/<module>}. */
+    static Wiring withGitHub(Wiring wiring, GitHub github) {
+        return new Wiring(wiring.targets(), () -> Optional.of(github), wiring.sleeper(), wiring.goals(),
+                wiring.clock(), wiring.fetch(), wiring.atPins(), module -> Optional.of(new Repo("owner",
+                module.name())));
     }
 
     /** Versions moved as a plain pom's edit, Maven (offline) for the rest: {@link PlainGoals}. */
@@ -77,7 +86,7 @@ final class ReleaseFixture {
     /** {@code wiring}, its versions moved by Maven itself. */
     static Wiring byMaven(Wiring wiring) {
         return new Wiring(wiring.targets(), wiring.github(), wiring.sleeper(), ReleaseFixture::maven, wiring.clock(),
-                wiring.fetch(), wiring.atPins());
+                wiring.fetch(), wiring.atPins(), wiring.repos());
     }
 
     /** Release assets by url, each the bytes it serves. */

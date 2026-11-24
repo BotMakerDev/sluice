@@ -6,11 +6,11 @@ package com.botmaker.sluice.gate;
 import com.botmaker.sluice.Git;
 import com.botmaker.sluice.Runner;
 import com.botmaker.sluice.config.Config;
-import com.botmaker.sluice.config.ConfigLoader;
 import com.botmaker.sluice.gate.GateVerdict.Status;
 import com.botmaker.sluice.github.GitHub;
 import com.botmaker.sluice.github.GitHub.Repo;
 import com.botmaker.sluice.github.GitHub.Run;
+import com.botmaker.sluice.model.Module;
 import com.botmaker.sluice.spi.GateContext;
 import com.botmaker.sluice.testing.FixtureUmbrella;
 import com.botmaker.sluice.testing.GateFixture;
@@ -202,6 +202,11 @@ class CiGateTest {
         return Git.line(umbrella.dir("a"), "rev-parse", "HEAD").orElseThrow();
     }
 
+    private static Module pendingOne(CiGate gate) {
+        assertEquals(1, gate.pending().size(), gate.pending().toString());
+        return gate.pending().iterator().next();
+    }
+
     private static GateContext executing(GateContext preview) {
         return new GateContext(preview.umbrella(), preview.graph(), preview.plan(), preview.config(),
                 new Runner(false, line -> { }), false);
@@ -223,39 +228,45 @@ class CiGateTest {
     }
 
     @Test
-    void runPushesThenWaitsForCiOnHead() {
+    void runPushesThenSettlesCiOnHeadBeforeTheReleaseCommit() {
         String head = aheadWithAWorkflow();
         List<List<Run>> answers = new ArrayList<>(List.of(List.of(PASSED),
                 List.of(new Run("ci", "in_progress", "", "u", head), PASSED),
                 List.of(new Run("ci", "completed", "success", "u", head), PASSED)));
         GitHub github = (repo, branch) -> Optional.of(answers.size() > 1 ? answers.removeFirst() : answers.getFirst());
-        int[] slept = {0};
         CiGate gate = new CiGate(Optional.of(github), module -> Optional.of(new Repo("o", "a")),
-                Optional.of(duration -> ++slept[0] > 0));
+                Optional.of(duration -> true));
+        GateContext ctx = executing(GateFixture.context(umbrella, Config.defaults(), false, "a"));
 
-        List<GateVerdict> verdicts = gate.check(executing(GateFixture.context(umbrella, Config.defaults(), false,
-                "a")));
+        GateVerdict deferred = only(gate.check(ctx));
 
-        assertEquals(Status.OK, only(verdicts).status(), only(verdicts).line());
-        assertEquals(2, slept[0]);
+        assertEquals(Status.SKIPPED, deferred.status());
+        assertTrue(deferred.line().contains("is still running: the run waits for it, up to 20 min, just before a's "
+                + "release commit"), deferred.line());
         assertEquals(Optional.of(head), Git.line(umbrella.dir("a"), "rev-parse", "refs/remotes/origin/main"),
                 "pushed before waiting");
+        Module a = pendingOne(gate);
+        assertEquals(Optional.empty(), gate.settle(ctx, a, false), "still running");
+        GateVerdict settled = gate.settle(ctx, a, false).orElseThrow();
+        assertEquals(Status.OK, settled.status(), settled.line());
+        assertTrue(gate.pending().isEmpty());
     }
 
     @Test
-    void waitThatRunsOutLeavesCiUnchecked() {
+    void lastSettleLeavesCiUncheckedWhenNoRunBuiltHead() {
         aheadWithAWorkflow();
         GitHub github = (repo, branch) -> Optional.of(List.of(PASSED));
-        int[] slept = {0};
         CiGate gate = new CiGate(Optional.of(github), module -> Optional.of(new Repo("o", "a")),
-                Optional.of(duration -> ++slept[0] > 0));
-        Config oneMinute = ConfigLoader.parse("ci-wait: 1\n", "t");
+                Optional.of(duration -> true));
+        GateContext ctx = executing(GateFixture.context(umbrella, Config.defaults(), false, "a"));
+        gate.check(ctx);
+        Module a = pendingOne(gate);
 
-        GateVerdict verdict = only(gate.check(executing(GateFixture.context(umbrella, oneMinute, false, "a"))));
+        assertEquals(Optional.empty(), gate.settle(ctx, a, false));
+        GateVerdict verdict = gate.settle(ctx, a, true).orElseThrow();
 
         assertEquals(Status.SKIPPED, verdict.status());
         assertTrue(verdict.line().contains("no finished run built its HEAD"), verdict.line());
-        assertEquals(1, slept[0], "one minute is two asks, thirty seconds apart");
     }
 
     @Test

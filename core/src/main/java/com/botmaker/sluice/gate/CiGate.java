@@ -24,6 +24,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -36,16 +38,19 @@ import java.util.stream.Stream;
  * an older commit than the module's {@code HEAD} are all skipped.
  *
  * <p><b>A run does not leave CI unchecked when it can wait for it</b>: a module ahead of its origin is pushed
- * first (the release would push it anyway, untested), then the gate waits, up to {@code ci-wait}, for a finished
- * run of each workflow on its {@code HEAD}. A preview pushes nothing and waits for nothing: it says it would.
- * A red run that failed before an upstream went green is rerun (its failed jobs) and waited on the same way.
+ * first (the release would push it anyway, untested). A module whose CI on {@code HEAD} is still running is
+ * {@link #pending}: the run {@link #settle}s it just before its release commit, up to {@code ci-wait}, and meanwhile
+ * releases every module that does not need it (2026-11-24), so one slow CI holds back only its dependents. A preview
+ * pushes nothing and waits for nothing: it says it would. A red run that failed before an upstream went green is
+ * rerun (its failed jobs) and waited on.
  */
 public final class CiGate implements Gate {
 
     /** How often a wait asks GitHub. */
-    static final Duration EVERY = Duration.ofSeconds(30);
+    public static final Duration EVERY = Duration.ofSeconds(30);
 
     private final Optional<GitHub> github;
+    private final Set<Module> pending = ConcurrentHashMap.newKeySet();
     private final Function<Module, Optional<Repo>> repos;
     private final Optional<Sleeper> sleeper;
 
@@ -53,7 +58,7 @@ public final class CiGate implements Gate {
         this(github, module -> Repo.ofCheckout(module.dir().dir()), Optional.empty());
     }
 
-    CiGate(Optional<GitHub> github, Function<Module, Optional<Repo>> repos) {
+    public CiGate(Optional<GitHub> github, Function<Module, Optional<Repo>> repos) {
         this(github, repos, Optional.empty());
     }
 
@@ -95,7 +100,7 @@ public final class CiGate implements Gate {
             if (ctx.runner().dryRun()) {
                 early.put(module, skipped(module + " is " + ahead + " commit(s) ahead of origin/" + branch
                         + ": a run pushes it" + (waits(ctx, module) ? " and waits up to "
-                        + ctx.config().ciWait().toMinutes() + " min for CI on its HEAD" : "")
+                        + ctx.config().ciWait().toMinutes() + " min for CI on its HEAD before its release commit" : "")
                         + "; CI was not checked"));
             } else if (!ctx.runner().git(module.dir().dir(), "push", "-q", "origin", branch).ok()) {
                 early.put(module, refused(module + ": its " + ahead + " commit(s) ahead of origin/" + branch
@@ -113,22 +118,68 @@ public final class CiGate implements Gate {
                 verdicts.add(early.get(module));
                 continue;
             }
-            if (!ctx.runner().dryRun() && waits(ctx, module)) {
-                asked.put(module, waitForHead(ctx, module, repo.get(), branch));
-            }
             Optional<List<Run>> runs = runsOf.apply(module);
-            if (runs.isEmpty()) {
-                verdicts.add(skipped(module + ": GitHub did not answer for " + repo.get() + ", CI was not checked"));
+            if (!ctx.runner().dryRun() && waits(ctx, module) && runs.isPresent()
+                    && !builtAll(runs.get(), module.dir().dir(), head(module))) {
+                pending.add(module);
+                verdicts.add(skipped(module + ": CI on " + shortHead(module) + " is still running: the run waits "
+                        + "for it, up to " + ctx.config().ciWait().toMinutes() + " min, just before " + module
+                        + "'s release commit, and meanwhile releases what does not need " + module));
                 continue;
             }
-            GateVerdict verdict = verdict(ctx, module, branch, runs.get(), runsOf);
-            List<Run> rerun = failedInAnUpstream(ctx, module, runs.get(), runsOf);
-            if (verdict.status() == GateVerdict.Status.REFUSED && !rerun.isEmpty()) {
-                verdict = rerun(ctx, module, repo.get(), branch, rerun, verdict, asked, runsOf);
-            }
-            verdicts.add(verdict);
+            verdicts.add(judge(ctx, module, repo.get(), branch, runs, asked, runsOf));
         }
         return verdicts;
+    }
+
+    /**
+     * The modules whose CI on {@code HEAD} was still running when {@link #check} asked: a run settles each with
+     * {@link #settle} before its release commit, and holds back only what needs it until then.
+     */
+    public Set<Module> pending() {
+        return Set.copyOf(pending);
+    }
+
+    /**
+     * {@code module}'s verdict once a finished run of each workflow built its {@code HEAD} and none still goes;
+     * empty until then. {@code last} answers from the runs as they are, as a wait that ran out does.
+     */
+    public Optional<GateVerdict> settle(GateContext ctx, Module module, boolean last) {
+        String branch = ctx.config().branch();
+        Repo repo = repos.apply(module).orElseThrow();
+        Optional<List<Run>> runs = github.orElseThrow().runs(repo, branch);
+        // GitHub not answering is asked again too, while there is time.
+        if (!last && (runs.isEmpty() || !builtAll(runs.get(), module.dir().dir(), head(module)))) {
+            return Optional.empty();
+        }
+        pending.remove(module);
+        Map<Module, Optional<List<Run>>> asked = new HashMap<>(Map.of(module, runs));
+        Function<Module, Optional<List<Run>>> runsOf = m -> asked.computeIfAbsent(m,
+                at -> repos.apply(at).flatMap(r -> github.get().runs(r, branch)));
+        return Optional.of(judge(ctx, module, repo, branch, runs, asked, runsOf));
+    }
+
+    /** The rule over {@code module}'s runs, a red run an upstream caused rerun first. */
+    private GateVerdict judge(GateContext ctx, Module module, Repo repo, String branch, Optional<List<Run>> runs,
+                              Map<Module, Optional<List<Run>>> asked,
+                              Function<Module, Optional<List<Run>>> runsOf) {
+        if (runs.isEmpty()) {
+            return skipped(module + ": GitHub did not answer for " + repo + ", CI was not checked");
+        }
+        GateVerdict verdict = verdict(ctx, module, branch, runs.get(), runsOf);
+        List<Run> rerun = failedInAnUpstream(ctx, module, runs.get(), runsOf);
+        if (verdict.status() == GateVerdict.Status.REFUSED && !rerun.isEmpty()) {
+            verdict = rerun(ctx, module, repo, branch, rerun, verdict, asked, runsOf);
+        }
+        return verdict;
+    }
+
+    private static Optional<String> head(Module module) {
+        return Git.line(module.dir().dir(), "rev-parse", "HEAD");
+    }
+
+    private static String shortHead(Module module) {
+        return head(module).map(sha -> sha.substring(0, Math.min(7, sha.length()))).orElse("HEAD");
     }
 
     /**
@@ -179,30 +230,6 @@ public final class CiGate implements Gate {
         }
         asked.put(module, runs);
         return verdict(ctx, module, branch, runs.get(), runsOf);
-    }
-
-    /**
-     * The branch's runs once a finished run built the module's {@code HEAD} and none is still going,
-     * or as they are when {@code ci-wait} ran out, the run was stopped, or GitHub did not answer.
-     */
-    private Optional<List<Run>> waitForHead(GateContext ctx, Module module, Repo repo, String branch) {
-        Path dir = module.dir().dir();
-        Optional<String> head = Git.line(dir, "rev-parse", "HEAD");
-        Sleeper sleep = sleeper.orElseGet(() -> Sleeper.real(ctx.runner()::stopping));
-        long asks = Math.max(1, ctx.config().ciWait().toSeconds() / EVERY.toSeconds());
-        Optional<List<Run>> runs = github.orElseThrow().runs(repo, branch);
-        for (long ask = 1; ask < asks && runs.isPresent() && !builtAll(runs.get(), dir, head); ask++) {
-            if (ask == 1) {
-                String at = head.map(sha -> sha.substring(0, Math.min(7, sha.length()))).orElse("HEAD");
-                ctx.runner().say(module + ": waiting up to " + ctx.config().ciWait().toMinutes() + " min for CI on "
-                        + at);
-            }
-            if (!sleep.sleep(EVERY)) {
-                break;
-            }
-            runs = github.get().runs(repo, branch);
-        }
-        return runs;
     }
 
     /**

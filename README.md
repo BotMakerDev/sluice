@@ -32,9 +32,11 @@ A run repairs what it can before refusing, and a preview says what it would do:
 - A module behind its origin with no change of its own is fast-forwarded; a pin behind its upstream's `main` is
   moved and committed (the `ci` gate pushes it). If that changes what would be cut, the run refuses and asks for a
   new preview.
-- A module ahead of its origin is pushed, then its CI is waited on (`ci-wait`, minutes). A red run that failed in
-  an upstream gone green since is rerun.
-- A module whose upstream the run releases is built at its new pins just before its release commit.
+- A module ahead of its origin is pushed, and its CI is waited on (`ci-wait`, minutes) just before its release
+  commit; meanwhile the run releases the modules that do not need it. A red run that failed in an upstream gone
+  green since is rerun.
+- A module whose upstream the run releases is built, its tests compiled, at its new pins just before its release
+  commit.
 - A module its target has not served in time holds back only the modules that need it; `sluice resume` goes on
   with them, and runs no `after-tag` step twice.
 

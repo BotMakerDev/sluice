@@ -23,10 +23,12 @@ import com.botmaker.sluice.decide.Requests;
 import com.botmaker.sluice.decide.Tags;
 import com.botmaker.sluice.execute.ReleaseState.Entry;
 import com.botmaker.sluice.gate.BuildsAtPinsGate;
+import com.botmaker.sluice.gate.CiGate;
 import com.botmaker.sluice.gate.CleanGate;
 import com.botmaker.sluice.gate.GateVerdict;
 import com.botmaker.sluice.gate.Gates;
 import com.botmaker.sluice.github.GitHub;
+import com.botmaker.sluice.github.GitHub.Repo;
 import com.botmaker.sluice.layout.UmbrellaLayout;
 import com.botmaker.sluice.model.Edge;
 import com.botmaker.sluice.model.Graph;
@@ -45,6 +47,7 @@ import com.botmaker.sluice.target.Waits.Sleeper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -131,13 +134,15 @@ public final class Release {
     /** What a run reaches outside itself, so a test can put local stand-ins there. */
     record Wiring(Function<Config, Function<Module, PublishTarget>> targets, Supplier<Optional<GitHub>> github,
                   Function<BooleanSupplier, Sleeper> sleeper, Function<Runner, PinMoves.Goals> goals, Clock clock,
-                  AssetPins.Fetch fetch, Function<Function<Module, PublishTarget>, AtPins> atPins) {
+                  AssetPins.Fetch fetch, Function<Function<Module, PublishTarget>, AtPins> atPins,
+                  Function<Module, Optional<Repo>> repos) {
 
         static Wiring real() {
             return new Wiring(Targets::of, GitHub::fromEnvironment, Sleeper::real,
                     runner -> PinMoves.Goals.maven(runner, List.of()),
                     Clock.systemDefaultZone(), AssetPins.Fetch.real(), targets -> new BuildsAtPinsGate(targets,
-                            List.of(), Optional.of(BuildsAtPinsGate.lastingRepository()))::build);
+                            List.of(), Optional.of(BuildsAtPinsGate.lastingRepository()))::build,
+                    module -> Repo.ofCheckout(module.dir().dir()));
         }
     }
 
@@ -185,7 +190,8 @@ public final class Release {
         Session session = new Session(umbrella, config, graph, plan, options, stop, events, wiring);
         List<Entry> entries = plan.releasing().entrySet().stream()
                 .map(e -> new Entry(e.getKey().name(), e.getValue(), Stage.DECIDED, "")).toList();
-        return session.release(Gates.standard(config, session.targets, session.github), plan, entries);
+        return session.release(Gates.standard(config, session.targets, session.github, wiring.repos()), plan,
+                entries);
     }
 
     /**
@@ -223,7 +229,7 @@ public final class Release {
         GateContext ctx = new GateContext(umbrella, graph, plan, config, new Runner(true, line -> {
         }), options.force());
         return new Preview(plan, Gates.run(ctx, Gates.standard(config, wiring.targets().apply(config),
-                wiring.github().get())));
+                wiring.github().get(), wiring.repos())));
     }
 
     /**
@@ -252,7 +258,8 @@ public final class Release {
         Graph graph = Graph.build(UmbrellaLayout.of(umbrella), config);
         List<Entry> entries = new ArrayList<>();
         List<Decision> decisions = new ArrayList<>();
-        List<Decision> untouched = new ArrayList<>();
+        List<Decision> undecided = new ArrayList<>();
+        Set<String> touched = new HashSet<>();
         for (Entry entry : state.modules()) {
             if (entry.stage() == Stage.SNAPSHOT) {
                 // Done, but kept: the umbrella's pointer commit may not have run.
@@ -274,14 +281,19 @@ public final class Release {
                     .orElse(Version.ZERO);
             Decision decision = new Decision(module, base, Optional.of(next.version()), ChangeKind.CHANGED, why);
             decisions.add(decision);
-            if (next.stage() == Stage.DECIDED && next.detail().isEmpty()) {
-                untouched.add(decision);
+            if (next.stage() == Stage.DECIDED) {
+                undecided.add(decision);
+                if (!next.detail().isEmpty()) {
+                    touched.add(next.module());
+                }
             }
         }
         Session session = new Session(umbrella, config, graph, new Plan(decisions, List.of()), options, stop,
                 events, wiring);
-        // Only a module the run never touched must be clean: the one it stopped in may hold half a step.
-        return session.release(List.of(new CleanGate()), new Plan(untouched, List.of()), entries);
+        // Only a module the run never touched must be clean: the one it stopped in may hold half a step. Every
+        // module before its release commit has its CI judged again: the stopped run may have left it pending or red.
+        return session.release(List.of(new CleanGate(touched), new CiGate(session.github, wiring.repos())),
+                new Plan(undecided, List.of()), entries);
     }
 
     /**
@@ -465,8 +477,9 @@ public final class Release {
         private Outcome gated(List<Gate> gates, Plan gated, List<Entry> initial) {
             entries.addAll(initial);
             initial.stream().filter(e -> e.stage() == Stage.SNAPSHOT).forEach(e -> moved.add(module(e.module())));
-            List<GateVerdict> verdicts = Gates.run(new GateContext(umbrella, graph, gated, config, runner,
-                    options.force()), gates);
+            GateContext context = new GateContext(umbrella, graph, gated, config, runner, options.force());
+            List<GateVerdict> verdicts = Gates.run(context, gates);
+            Optional<CiGate> ci = gates.stream().filter(CiGate.class::isInstance).map(CiGate.class::cast).findFirst();
             verdicts.forEach(verdict -> {
                 log.verdict(verdict);
                 events.accept(new Event.Verdict(verdict));
@@ -500,31 +513,94 @@ public final class Release {
             boolean done = true;
             // A module its target has not served yet holds back only what needs it; the rest goes on.
             Set<Module> stuck = new LinkedHashSet<>();
-            for (int at = 0; at < entries.size(); at++) {
-                if (entries.get(at).stage() == Stage.SNAPSHOT) {
-                    continue;
-                }
-                Module module = module(entries.get(at).module());
-                Optional<Module> waitsFor = stuck.stream().filter(upstream -> needs(module, upstream)).findFirst();
-                if (waitsFor.isPresent()) {
-                    runner.say(module + ": waits for " + waitsFor.get() + ", not published yet");
-                    entries.set(at, entries.get(at).at(entries.get(at).stage(), "waits for " + waitsFor.get()
-                            + ": resume goes on"));
-                    done = false;
-                    continue;
-                }
-                try {
-                    Stage reached = advance(at, module, owed.contains(module));
-                    if (reached == Stage.PUSHED && !runner.stopping()) {
-                        stuck.add(module);
+            Set<Module> waiting = new HashSet<>();
+            // So does a module whose CI on HEAD is still running (the ci gate's pending): each pass releases what
+            // does not need one, and the next pass, 30 s on, asks again. Each module waits up to ci-wait from its
+            // first ask, by the clock and by the count of asks, whichever ends first: a pass that builds and
+            // publishes others takes longer than 30 s, and a dependent first asked late still gets its time.
+            long asks = Math.max(1, config.ciWait().toSeconds() / CiGate.EVERY.toSeconds());
+            Map<Module, Long> asked = new HashMap<>();
+            Map<Module, Instant> deadline = new HashMap<>();
+            boolean halted = false;
+            while (!halted) {
+                Set<Module> held = new LinkedHashSet<>();
+                for (int at = 0; at < entries.size(); at++) {
+                    if (entries.get(at).stage() == Stage.SNAPSHOT) {
+                        continue;
+                    }
+                    Module module = module(entries.get(at).module());
+                    if (stuck.contains(module) || waiting.contains(module)) {
+                        continue;
+                    }
+                    if (held.stream().anyMatch(upstream -> needs(module, upstream))) {
+                        held.add(module);
+                        continue;
+                    }
+                    Optional<Module> waitsFor = stuck.stream().filter(upstream -> needs(module, upstream)).findFirst();
+                    if (waitsFor.isPresent()) {
+                        runner.say(module + ": waits for " + waitsFor.get() + ", not published yet");
+                        entries.set(at, entries.get(at).at(entries.get(at).stage(), "waits for " + waitsFor.get()
+                                + ": resume goes on"));
+                        waiting.add(module);
                         done = false;
-                    } else if (reached != Stage.SNAPSHOT) {
+                        continue;
+                    }
+                    if (entries.get(at).stage() == Stage.DECIDED && ci.isPresent()
+                            && ci.get().pending().contains(module)) {
+                        Instant now = wiring.clock().instant();
+                        long ask = asked.merge(module, 1L, Long::sum);
+                        boolean last = ask >= asks
+                                || !now.isBefore(deadline.computeIfAbsent(module, m -> now.plus(config.ciWait())));
+                        Optional<GateVerdict> settled = ci.get().settle(context, module, last);
+                        if (settled.isEmpty()) {
+                            if (ask == 1) {
+                                runner.say(module + ": CI on its HEAD is still running: releasing what does not "
+                                        + "need it first");
+                            }
+                            held.add(module);
+                            continue;
+                        }
+                        GateVerdict verdict = options.force() ? settled.get().forced() : settled.get();
+                        log.verdict(verdict);
+                        events.accept(new Event.Verdict(verdict));
+                        if (verdict.stops()) {
+                            runner.say("stopped at " + module + ": " + verdict.refusal());
+                            entries.set(at, entries.get(at).at(Stage.DECIDED, verdict.refusal()));
+                            done = false;
+                            halted = true;
+                            break;
+                        }
+                    }
+                    try {
+                        Stage reached = advance(at, module, owed.contains(module));
+                        if (reached == Stage.PUSHED && !runner.stopping()) {
+                            stuck.add(module);
+                            done = false;
+                        } else if (reached != Stage.SNAPSHOT) {
+                            done = false;
+                            halted = true;
+                            break;
+                        }
+                    } catch (Refusal refusal) {
+                        runner.say("stopped at " + module + ": " + refusal.getMessage());
+                        entries.set(at, entries.get(at).at(entries.get(at).stage(), refusal.getMessage()));
                         done = false;
+                        halted = true;
                         break;
                     }
-                } catch (Refusal refusal) {
-                    runner.say("stopped at " + module + ": " + refusal.getMessage());
-                    entries.set(at, entries.get(at).at(entries.get(at).stage(), refusal.getMessage()));
+                }
+                if (halted || held.isEmpty()) {
+                    break;
+                }
+                if (runner.stopping() || !sleeper.sleep(CiGate.EVERY)) {
+                    for (int at = 0; at < entries.size(); at++) {
+                        Module module = module(entries.get(at).module());
+                        if (held.contains(module)) {
+                            runner.say(module + ": stopped while its CI ran: resume goes on");
+                            entries.set(at, entries.get(at).at(entries.get(at).stage(),
+                                    "stopped while its CI ran: resume goes on"));
+                        }
+                    }
                     done = false;
                     break;
                 }

@@ -8,6 +8,7 @@ import com.botmaker.sluice.execute.Release.Outcome;
 import com.botmaker.sluice.execute.Release.Status;
 import com.botmaker.sluice.execute.ReleaseFixture.Flaky;
 import com.botmaker.sluice.testing.FixtureUmbrella;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -35,6 +36,7 @@ class ResumeTest {
     Path tmp;
 
     @Test
+    @Tag("slow")
     void stopsAfterFailedPublishThenResumesRest() {
         FixtureUmbrella umbrella = chain(tmp);
         Flaky target = new Flaky();
@@ -69,6 +71,7 @@ class ResumeTest {
     }
 
     @Test
+    @Tag("slow")
     void resumesTheStepItStoppedInDespiteItsDirtyTree() {
         FixtureUmbrella umbrella = chain(tmp);
         Path records = tmp.resolve("records");
@@ -104,6 +107,7 @@ class ResumeTest {
     }
 
     @Test
+    @Tag("slow")
     void finishedRunHasNothingToResume() {
         FixtureUmbrella umbrella = chain(tmp);
         List<String> lines = lines();

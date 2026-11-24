@@ -14,7 +14,10 @@ import com.botmaker.sluice.spi.PublishTarget;
 import com.botmaker.sluice.testing.GateFixture.FixedTarget;
 import com.botmaker.sluice.execute.ReleaseFixture.Assets;
 import com.botmaker.sluice.gate.GateVerdict;
+import com.botmaker.sluice.github.GitHub;
+import com.botmaker.sluice.github.GitHub.Run;
 import com.botmaker.sluice.testing.FixtureUmbrella;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -71,6 +74,7 @@ class ReleaseTest {
     }
 
     @Test
+    @Tag("slow")
     void executeTagsInOrderMovesPinsAndSnapshots() {
         FixtureUmbrella umbrella = pinned(tmp);
         List<String> lines = lines();
@@ -106,6 +110,7 @@ class ReleaseTest {
     }
 
     @Test
+    @Tag("slow")
     void textPinMovedInReleaseCommitOnly() {
         FixtureUmbrella umbrella = FixtureUmbrella.create(tmp)
                 .module("a", pom("a", "1.0.1-SNAPSHOT", "")).tag("a", "v1.0.0")
@@ -130,6 +135,7 @@ class ReleaseTest {
     }
 
     @Test
+    @Tag("slow")
     void afterReleasePropertySet() {
         FixtureUmbrella umbrella = FixtureUmbrella.create(tmp)
                 .module("a", pom("a", "1.0.1-SNAPSHOT", "  <properties><baseline>1.0.0</baseline></properties>\n"))
@@ -233,7 +239,7 @@ class ReleaseTest {
         PublishTarget notYet = new FixedTarget(Spelling.TAG, Optional.empty(), PublishTarget.Served.NO);
         Wiring wiring = new Wiring(config -> module -> module.name().equals("a") ? notYet : served(),
                 Optional::empty, stop -> duration -> true, ReleaseFixture::plain, ReleaseFixture.CLOCK, Assets.NONE,
-                targets -> (module, pins, graph) -> Optional.empty());
+                targets -> (module, pins, graph) -> Optional.empty(), module -> Optional.empty());
         List<String> lines = lines();
 
         Outcome stopped = run(umbrella, EXECUTE, wiring, lines, "a", "b", "c");
@@ -246,6 +252,72 @@ class ReleaseTest {
 
         assertEquals(Status.DONE, resume(umbrella, served(), lines).status(), String.join("\n", lines));
         assertEquals(List.of("v0.1.0", "v0.1.1"), tags(umbrella, "b"));
+    }
+
+    @Test
+    void aModuleWhoseCiStillRunsHoldsBackOnlyItsDependents() {
+        FixtureUmbrella umbrella = pinned(tmp)
+                .commit("a", ".github/workflows/ci.yml", "on: push\n").push("a")
+                .module("c", pom("c", "3.0.1-SNAPSHOT", "")).tag("c", "v3.0.0")
+                .commit("c", "src/C.java", "class C {}\n").push("c");
+        String head = FixtureUmbrella.git(umbrella.dir("a"), "rev-parse", "HEAD").out().strip();
+        int[] asked = {0};
+        GitHub github = (repo, branch) -> Optional.of(!repo.name().equals("a") ? List.of()
+                : ++asked[0] < 3 ? List.of(new Run("ci", "in_progress", "", "u", head))
+                : List.of(new Run("ci", "completed", "success", "u", head)));
+        List<String> lines = lines();
+
+        Outcome done = run(umbrella, EXECUTE, ReleaseFixture.withGitHub(wiring(served()), github), lines,
+                "a", "b", "c");
+
+        assertEquals(Status.DONE, done.status(), String.join("\n", lines));
+        assertTrue(lines.contains("a: CI on its HEAD is still running: releasing what does not need it first"),
+                String.join("\n", lines));
+        int c = indexOf(lines, "c tag -a v3.0.1");
+        int a = indexOf(lines, "a tag -a v1.0.1");
+        int b = indexOf(lines, "b tag -a v0.1.1");
+        assertTrue(c >= 0 && c < a && a < b, "c, which needs nothing of a, first:\n" + String.join("\n", lines));
+        assertTrue(lines.stream().anyMatch(line -> line.startsWith("OK a: CI on main is green")),
+                String.join("\n", lines));
+    }
+
+    @Test
+    @Tag("slow")
+    void ciThatTurnsRedStopsTheRunAndResumeJudgesItAgain() {
+        FixtureUmbrella umbrella = pinned(tmp)
+                .commit("a", ".github/workflows/ci.yml", "on: push\n").push("a");
+        String head = FixtureUmbrella.git(umbrella.dir("a"), "rev-parse", "HEAD").out().strip();
+        int[] asked = {0};
+        String[] conclusion = {"failure"};
+        GitHub github = (repo, branch) -> Optional.of(!repo.name().equals("a") ? List.of()
+                : ++asked[0] < 3 ? List.of(new Run("ci", "in_progress", "", "u", head))
+                : List.of(new Run("ci", "completed", conclusion[0], "u", head)));
+        Wiring wiring = ReleaseFixture.withGitHub(wiring(served()), github);
+        List<String> lines = lines();
+
+        Outcome stopped = run(umbrella, EXECUTE, wiring, lines, "a", "b");
+
+        assertEquals(Status.STOPPED, stopped.status(), String.join("\n", lines));
+        assertEquals(List.of("v1.0.0"), tags(umbrella, "a"));
+        List<String> refused = lines();
+        assertEquals(Status.REFUSED, ReleaseFixture.resume(umbrella, wiring, refused).status(),
+                "a resume judges CI again, still red:\n" + String.join("\n", refused));
+        assertEquals(List.of("v1.0.0"), tags(umbrella, "a"));
+
+        conclusion[0] = "success";
+        List<String> resumed = lines();
+        assertEquals(Status.DONE, ReleaseFixture.resume(umbrella, wiring, resumed).status(),
+                String.join("\n", resumed));
+        assertTrue(tags(umbrella, "a").contains("v1.0.1") && tags(umbrella, "b").contains("v0.1.1"));
+    }
+
+    private static int indexOf(List<String> lines, String part) {
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).contains(part)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @Test
@@ -305,6 +377,7 @@ class ReleaseTest {
 
     /** An editor's file is in no commit of the release, and stays where it was. */
     @Test
+    @Tag("slow")
     void untrackedFileStaysOutOfTheRelease() throws Exception {
         FixtureUmbrella umbrella = pinned(tmp);
         Files.writeString(umbrella.dir("b").resolve(".project"), "an editor's\n");
@@ -319,6 +392,7 @@ class ReleaseTest {
     }
 
     @Test
+    @Tag("slow")
     void runSyncsAStalePinOfACleanModuleBeforeItGates() {
         FixtureUmbrella umbrella = pinned(tmp);
         umbrella.commit("b", "pom.xml", read(umbrella.dir("b").resolve("pom.xml"))
@@ -334,6 +408,7 @@ class ReleaseTest {
     }
 
     @Test
+    @Tag("slow")
     void runFastForwardsAModuleBehindItsOrigin() throws Exception {
         FixtureUmbrella umbrella = pinned(tmp);
         Path other = tmp.resolve("other");
@@ -391,6 +466,7 @@ class ReleaseTest {
     }
 
     @Test
+    @Tag("slow")
     void aModuleThatDoesNotBuildAtItsPinsStopsBeforeItsReleaseCommit() {
         FixtureUmbrella umbrella = pinned(tmp);
         List<String> built = new ArrayList<>();
@@ -424,6 +500,7 @@ class ReleaseTest {
 
     /** {@code b} changed nothing of its own: the release writes its notes, the pin it moves. */
     @Test
+    @Tag("slow")
     void releaseOwedToItsUpstreamWritesItsNotes() {
         String bReleased = "  <properties><a.version>v1.0.0</a.version></properties>\n" + dep("a", "${a.version}");
         FixtureUmbrella umbrella = FixtureUmbrella.create(tmp)

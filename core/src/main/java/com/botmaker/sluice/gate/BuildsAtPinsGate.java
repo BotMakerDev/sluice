@@ -319,7 +319,7 @@ public final class BuildsAtPinsGate implements Gate {
     }
 
     /**
-     * {@code mvn compile} of the module's {@code HEAD} in a throwaway clone, with its pins; empty when the build
+     * {@code mvn test-compile} of the module's {@code HEAD} in a throwaway clone, with its pins; empty when the build
      * could not be made. A clone, not a worktree: it leaves the module's repository as it was.
      */
     private Optional<Proc.Result> compile(Module module, Map<Pin, String> pins, Path repository)
@@ -351,7 +351,9 @@ public final class BuildsAtPinsGate implements Gate {
                     argv.add("-D" + property.name() + "=" + release);
                 }
             });
-            argv.add("compile");
+            // Its tests too: JitPack's build compiles them (install -DskipTests), so a test that no longer compiles
+            // at the pins fails the published tag.
+            argv.add("test-compile");
             Proc.Result run = Proc.run(tree, argv);
             return run.exit() == Proc.INTERRUPTED || run.exit() == Proc.NOT_STARTED
                     ? Optional.empty() : Optional.of(run);

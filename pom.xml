@@ -40,6 +40,9 @@
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- The tests tagged slow (a whole release run on a fixture umbrella, each over 5 s) are left out of a
+             build here and of Windows CI; -Dsluice.excludedTags= runs them, as the Ubuntu CI job does. -->
+        <sluice.excludedTags>slow</sluice.excludedTags>
     </properties>
 
     <dependencyManagement>
@@ -88,6 +91,7 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.2.5</version>
                     <configuration>
+                        <excludedGroups>${sluice.excludedTags}</excludedGroups>
                         <!-- BuildsAtPinsGateTest runs Maven in an empty local repository; this one stands in for
                              Central there, so the test needs no network. -->
                         <systemPropertyVariables>
