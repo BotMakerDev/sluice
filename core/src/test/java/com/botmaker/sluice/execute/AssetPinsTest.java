@@ -134,6 +134,36 @@ class AssetPinsTest {
     }
 
     @Test
+    @Tag("slow")
+    void anXmlFilesNamedElementsArePinned() throws IOException {
+        String xml = "<project>\n  <!-- <web.sha256>no</web.sha256> -->\n  <web.version></web.version>\n"
+                + "  <web.sha256/>\n</project>\n";
+        FixtureUmbrella umbrella = umbrella().commit("plugin", "pin.xml", xml)
+                .commit("plugin", "CHANGELOG.md", "# Changelog\n").push("plugin")
+                .commit("a", "CHANGELOG.md", "# Changelog\n\n## [Unreleased]\n\n- A.\n").push("a");
+        config(umbrella, "changelog: {pins: true}\nasset-pins:\n  - {module: a, asset: a-all.jar,"
+                + " file: plugin/pin.xml, properties: {version: web.version, sha256: web.sha256}}\n");
+        List<String> lines = lines();
+
+        Status status = run(umbrella, EXECUTE, wiring(served(), new Assets(Map.of(URL, JAR))), lines, "a").status();
+
+        assertEquals(Status.DONE, status, String.join("\n", lines));
+        Path jar = Files.write(tmp.resolve("jar"), JAR);
+        String pinned = xml.replace("<web.version></web.version>", "<web.version>1.0.1</web.version>")
+                .replace("<web.sha256/>", "<web.sha256>" + AssetPins.sha256(jar) + "</web.sha256>");
+        Path remote = tmp.resolve("remotes").resolve("plugin.git");
+        assertEquals(pinned, FixtureUmbrella.git(remote, "show", "main:pin.xml").out());
+        String notes = FixtureUmbrella.git(remote, "show", "main:CHANGELOG.md").out();
+        assertTrue(notes.contains("## [Unreleased]") && notes.contains("- Ships a-all.jar of a 1.0.1."), notes);
+    }
+
+    @Test
+    void anElementThatIsNotThereIsRefused() {
+        assertEquals(Optional.empty(), AssetPins.element("<a><!-- <v>1</v> --></a>", "v"));
+        assertThrows(Refusal.class, () -> AssetPins.setElement("<a/>", "v", "1"));
+    }
+
+    @Test
     void aFieldIsSetAndTheRestKeptAsWritten() {
         String json = "{\"sha256\" : \"ab\", \"other\": 1}";
 

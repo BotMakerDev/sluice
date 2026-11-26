@@ -186,17 +186,22 @@ public record Config(Target target, String branch, String tagPattern, List<Strin
     /**
      * A file, in a repository of the umbrella that need not be a module, that pins {@code module}'s released
      * {@code asset} by hash. Once a release of {@code module} is pushed, the asset of its GitHub release is waited
-     * for and downloaded, and {@code file}'s {@code "version"}, {@code "url"} and {@code "sha256"} get its version,
-     * its download url and its sha256; the file's repository commits and pushes that change alone.
+     * for and downloaded, and {@code file} gets its version, its download url and its sha256; the file's
+     * repository commits and pushes that change alone. A JSON file takes them in its {@code "version"},
+     * {@code "url"} and {@code "sha256"}; a pom or other XML file in the elements {@code properties} names.
      *
-     * @param file  the JSON file, from the umbrella's root, in a submodule
-     * @param bumps JSON files of the same repository whose {@code "version"} the same commit raises by a patch,
-     *              such as the manifest an installed copy of the file is updated by
+     * @param file       the {@code .json} or {@code .xml} file, from the umbrella's root, in a submodule
+     * @param bumps      JSON files of the same repository whose {@code "version"} the same commit raises by a patch,
+     *                   such as the manifest an installed copy of the file is updated by
+     * @param properties of an XML file, the element taking each of {@code version}, {@code sha256} and, if wanted,
+     *                   {@code url}; empty for a JSON file
      */
-    public record AssetPinConfig(String module, String asset, String file, List<String> bumps) {
+    public record AssetPinConfig(String module, String asset, String file, List<String> bumps,
+                                 Map<String, String> properties) {
 
         public AssetPinConfig {
             bumps = List.copyOf(bumps);
+            properties = Collections.unmodifiableMap(new LinkedHashMap<>(properties));
         }
     }
 

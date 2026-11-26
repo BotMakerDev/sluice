@@ -292,14 +292,28 @@ public final class ConfigLoader {
     }
 
     private static AssetPinConfig assetPin(Node node) {
-        Map<String, Node> keys = node.map(Set.of("module", "asset", "file", "bumps"));
+        Map<String, Node> keys = node.map(Set.of("module", "asset", "file", "bumps", "properties"));
         Node file = required(node, keys, "file");
         List<String> bumps = optional(keys, "bumps").map(Node::strings).orElse(List.of());
-        if (!json(file.string()) || !bumps.stream().allMatch(ConfigLoader::json)) {
-            throw (json(file.string()) ? keys.get("bumps") : file).wrong("must be .json files");
+        if (!bumps.stream().allMatch(ConfigLoader::json)) {
+            throw keys.get("bumps").wrong("must be .json files");
+        }
+        boolean xml = file.string().toLowerCase(Locale.ROOT).endsWith(".xml");
+        if (!xml && !json(file.string())) {
+            throw file.wrong("must be a .json or .xml file");
+        }
+        Map<String, String> properties = new LinkedHashMap<>();
+        if (xml) {
+            Node given = required(node, keys, "properties");
+            Map<String, Node> fields = given.map(Set.of("version", "url", "sha256"));
+            required(given, fields, "version");
+            required(given, fields, "sha256");
+            fields.forEach((field, element) -> properties.put(field, element.string()));
+        } else if (keys.containsKey("properties")) {
+            throw keys.get("properties").wrong("is for an .xml file; a .json file has its own fields");
         }
         return new AssetPinConfig(required(node, keys, "module").string(), required(node, keys, "asset").string(),
-                file.string(), bumps);
+                file.string(), bumps, properties);
     }
 
     private static boolean json(String file) {

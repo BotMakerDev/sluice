@@ -87,10 +87,20 @@ class ConfigLoaderTest {
                 + "  - {module: cli, asset: cli-all.jar, file: plugin/cli.json, bumps: [plugin/plugin.json]}\n", "t");
 
         assertEquals(List.of(new Config.AssetPinConfig("cli", "cli-all.jar", "plugin/cli.json",
-                List.of("plugin/plugin.json"))), config.assetPins());
+                List.of("plugin/plugin.json"), Map.of())), config.assetPins());
         Refusal notJson = assertThrows(Refusal.class, () -> ConfigLoader.parse("asset-pins:\n"
                 + "  - {module: cli, asset: cli-all.jar, file: plugin/cli.txt}\n", "t"));
-        assertTrue(notJson.getMessage().contains("must be .json files"), notJson.getMessage());
+        assertTrue(notJson.getMessage().contains("must be a .json or .xml file"), notJson.getMessage());
+        Config pom = ConfigLoader.parse("asset-pins:\n  - {module: web, asset: web.zip, file: sdk/pom.xml,"
+                + " properties: {version: web.version, sha256: web.sha256}}\n", "t");
+        assertEquals(Map.of("version", "web.version", "sha256", "web.sha256"),
+                pom.assetPins().getFirst().properties());
+        Refusal noHash = assertThrows(Refusal.class, () -> ConfigLoader.parse("asset-pins:\n"
+                + "  - {module: web, asset: web.zip, file: sdk/pom.xml, properties: {version: web.version}}\n", "t"));
+        assertTrue(noHash.getMessage().contains("needs sha256"), noHash.getMessage());
+        Refusal jsonProperties = assertThrows(Refusal.class, () -> ConfigLoader.parse("asset-pins:\n"
+                + "  - {module: cli, asset: a.jar, file: plugin/cli.json, properties: {version: v}}\n", "t"));
+        assertTrue(jsonProperties.getMessage().contains("is for an .xml file"), jsonProperties.getMessage());
         Refusal noAsset = assertThrows(Refusal.class, () -> ConfigLoader.parse("asset-pins:\n"
                 + "  - {module: cli, file: plugin/cli.json}\n", "t"));
         assertTrue(noAsset.getMessage().contains("needs asset"), noAsset.getMessage());

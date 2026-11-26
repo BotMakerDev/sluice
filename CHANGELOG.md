@@ -5,6 +5,13 @@ All notable changes to this project are documented here, in the format of
 
 ## [Unreleased]
 
+### Added
+
+- **An asset pin can live in a pom** (or any XML file): `asset-pins` takes a `.xml` `file` with `properties`, naming
+  the element that gets each of `version`, `sha256` and, if wanted, `url`, so a Maven build can pin another module's
+  released asset in its own properties. Where release notes come from pins (`changelog: {pins: true}`), an asset
+  pin also adds a line to its repository's `CHANGELOG.md`, so the next release of it has notes.
+
 ### Changed
 
 - **CI is waited on just before a module's release commit**, not before the first tag: a module whose CI on `HEAD`

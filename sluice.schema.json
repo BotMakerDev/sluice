@@ -224,8 +224,19 @@
         "asset": {"type": "string", "description": "The release asset's file name."},
         "file": {
           "type": "string",
-          "pattern": "(?i)\\.json$",
-          "description": "The JSON file whose version, url and sha256 the asset sets."
+          "pattern": "(?i)\\.(json|xml)$",
+          "description": "The file the asset sets: a JSON file's version, url and sha256, or the elements of an XML file that properties names."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "sha256"],
+          "properties": {
+            "version": {"type": "string"},
+            "url": {"type": "string"},
+            "sha256": {"type": "string"}
+          },
+          "description": "Of an XML file, such as a pom: the element taking each value. Not for a JSON file."
         },
         "bumps": {
           "type": "array",

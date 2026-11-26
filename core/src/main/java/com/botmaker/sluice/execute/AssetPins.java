@@ -3,6 +3,7 @@
 
 package com.botmaker.sluice.execute;
 
+import com.botmaker.sluice.Changelog;
 import com.botmaker.sluice.Git;
 import com.botmaker.sluice.Level;
 import com.botmaker.sluice.Proc;
@@ -34,6 +35,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -160,6 +163,11 @@ final class AssetPins {
             files.add(bumped);
         }
         String rel = root.relativize(checkout).toString().replace('\\', '/');
+        // Where notes come from pins, the pin is a note too: without one, a module whose only change is this
+        // commit is refused its next release.
+        Optional<Path> changelog = Optional.of(checkout.resolve(Changelog.FILE))
+                .filter(log -> config.changelog().enabled() && config.changelog().pins() && Files.isRegularFile(log));
+        changelog.ifPresent(files::add);
 
         // Its commit and push must carry the pin only: never the author's own work.
         String branch = config.branch();
@@ -178,22 +186,33 @@ final class AssetPins {
         }
 
         String text = read(file);
-        if (field(text, "version").equals(Optional.of(version.toString()))
-                && field(text, "url").equals(Optional.of(url))) {
+        // A JSON pin has fixed fields; an XML one names its elements, and may leave the url out.
+        boolean xml = !pin.properties().isEmpty();
+        Map<String, String> names = xml ? pin.properties()
+                : Map.of("version", "version", "url", "url", "sha256", "sha256");
+        BiFunction<String, String, Optional<String>> get = xml ? AssetPins::element : AssetPins::field;
+        if (get.apply(text, names.get("version")).equals(Optional.of(version.toString()))
+                && (!names.containsKey("url") || get.apply(text, names.get("url")).equals(Optional.of(url)))
+                && get.apply(text, names.get("sha256")).filter(hash -> !hash.isBlank()).isPresent()) {
             runner.say("    " + pin.file() + " pins " + module + " " + tag + " already");
             return Optional.of(rel);
         }
         Map<String, String> set = new LinkedHashMap<>();
         set.put("version", version.toString());
-        set.put("url", url);
+        if (names.containsKey("url")) {
+            set.put("url", url);
+        }
         set.put("sha256", sha256(runner, url, fetch, sleeper));
         String pinned = text;
-        for (Map.Entry<String, String> field : set.entrySet()) {
-            pinned = set(pinned, field.getKey(), field.getValue());
+        for (Map.Entry<String, String> value : set.entrySet()) {
+            String name = names.get(value.getKey());
+            pinned = xml ? setElement(pinned, name, value.getValue()) : set(pinned, name, value.getValue());
         }
         Map<Path, String> writes = new LinkedHashMap<>();
         writes.put(file, pinned);
-        for (Path bumped : files.subList(1, files.size())) {
+        changelog.ifPresent(log -> writes.put(log, PinNotes.with(read(log),
+                List.of("- Ships " + pin.asset() + " of " + module + " " + version + "."))));
+        for (Path bumped : files.subList(1, 1 + pin.bumps().size())) {
             String json = read(bumped);
             Version raised = field(json, "version").flatMap(Version::parse).orElseThrow(() -> new Refusal(
                     umbrella.relativize(bumped) + " has no \"version\" of the form 1.2.3")).bump(Level.PATCH);
@@ -274,6 +293,25 @@ final class AssetPins {
             throw new Refusal("it has no string field \"" + field + "\"");
         }
         return matcher.replaceFirst(Matcher.quoteReplacement(matcher.group(1) + "\"" + value + "\""));
+    }
+
+    /** A comment, matched first so an element inside one is passed over, or {@code <name>value</name>} or {@code <name/>}. */
+    private static Optional<MatchResult> found(String xml, String name) {
+        String quoted = Pattern.quote(name);
+        Pattern pattern = Pattern.compile("(?s)<!--.*?-->|<" + quoted + "\\s*/>|<" + quoted + ">([^<]*)</" + quoted
+                + ">");
+        return pattern.matcher(xml).results().filter(r -> !r.group().startsWith("<!--")).findFirst();
+    }
+
+    /** The text of {@code xml}'s first element {@code name}; empty when it has none. */
+    static Optional<String> element(String xml, String name) {
+        return found(xml, name).map(r -> r.group(1) == null ? "" : r.group(1));
+    }
+
+    /** {@code xml} with the text of its first element {@code name} set to {@code value}, the rest as written. */
+    static String setElement(String xml, String name, String value) {
+        MatchResult at = found(xml, name).orElseThrow(() -> new Refusal("it has no element <" + name + ">"));
+        return xml.substring(0, at.start()) + "<" + name + ">" + value + "</" + name + ">" + xml.substring(at.end());
     }
 
     /** {@code path} past any link, or as it is when it does not exist yet. */
