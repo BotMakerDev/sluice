@@ -273,9 +273,10 @@ class ReleaseTest {
         assertEquals(Status.DONE, done.status(), String.join("\n", lines));
         assertTrue(lines.contains("a: CI on its HEAD is still running: releasing what does not need it first"),
                 String.join("\n", lines));
-        int c = indexOf(lines, "c tag -a v3.0.1");
-        int a = indexOf(lines, "a tag -a v1.0.1");
-        int b = indexOf(lines, "b tag -a v0.1.1");
+        // each version is one module's; Windows quotes the module's path, so the line has "c' tag", not "c tag"
+        int c = indexOf(lines, " tag -a v3.0.1");
+        int a = indexOf(lines, " tag -a v1.0.1");
+        int b = indexOf(lines, " tag -a v0.1.1");
         assertTrue(c >= 0 && c < a && a < b, "c, which needs nothing of a, first:\n" + String.join("\n", lines));
         assertTrue(lines.stream().anyMatch(line -> line.startsWith("OK a: CI on main is green")),
                 String.join("\n", lines));
